@@ -7,6 +7,7 @@
 
 use aide::axum::{routing::post_with, ApiRouter};
 use aide::transform::TransformOperation;
+use automation_simulator_lib::engine::SimWorld;
 use automation_simulator_lib::planner::{
   self, BomLine, PlannerError, PropertyPlan, PropertyRequirements,
   YardRequirement, ZoneRequirement,
@@ -17,6 +18,8 @@ use axum::response::IntoResponse;
 use axum::Json;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tracing::info;
 
 use super::{ApiError, ApiResult};
 use crate::web_base::AppState;
@@ -204,17 +207,111 @@ async fn plan(
   Ok(Json(PlanResponse { plans: dtos }))
 }
 
+// ── Apply handler ───────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct PlanApplyRequest {
+  #[serde(flatten)]
+  pub plan: PlanRequest,
+  /// Which of the ranked plans to commit.  0 = top plan.
+  #[serde(default)]
+  pub plan_index: usize,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PlanApplyResponse {
+  pub property_id: String,
+  pub property_name: String,
+  pub zones: usize,
+  pub plan: PlanDto,
+}
+
+async fn apply(
+  State(state): State<AppState>,
+  Json(req): Json<PlanApplyRequest>,
+) -> ApiResult<PlanApplyResponse> {
+  let plan_index = req.plan_index;
+  let top_n = (plan_index + 1).clamp(1, 10);
+  let reqs = to_requirements(req.plan).map_err(|e| e.into_response())?;
+  let plans = planner::recommend(&reqs, &state.catalog, top_n)
+    .map_err(|e| planner_error_to_api(e).into_response())?;
+  let chosen = plans.into_iter().nth(plan_index).ok_or_else(|| {
+    ApiError::BadRequest(format!(
+      "plan_index {plan_index} out of range; the planner returned fewer candidates"
+    ))
+    .into_response()
+  })?;
+
+  // Rebuild the SimWorld from the picked bundle's zones.  The clock
+  // resets to mid-summer so the dashboard shows interesting weather
+  // out of the box, matching the startup path.
+  let zones = chosen.bundle.zones.clone();
+  let new_world = SimWorld::new(
+    chrono::NaiveDate::from_ymd_opt(2026, 7, 1).expect("valid date"),
+    &chosen.bundle.property.climate_zone,
+    zones,
+    Arc::clone(&state.catalog),
+    1,
+    0.30,
+    Vec::new(),
+  )
+  .map_err(|e| {
+    ApiError::Internal(format!(
+      "failed to build sim world from chosen plan: {e}"
+    ))
+    .into_response()
+  })?;
+
+  {
+    let mut bundle = state.property.lock().await;
+    *bundle = chosen.bundle.clone();
+  }
+  {
+    let mut world = state.world.0.lock().await;
+    *world = new_world;
+  }
+
+  info!(
+    property_id = %chosen.bundle.property.id,
+    controller = %chosen.controller_model_id,
+    zones = chosen.bundle.zones.len(),
+    "Applied plan — running simulator replaced"
+  );
+
+  let zones_count = chosen.bundle.zones.len();
+  let property_id = chosen.bundle.property.id.as_str().to_string();
+  let property_name = chosen.bundle.property.name.clone();
+  Ok(Json(PlanApplyResponse {
+    property_id,
+    property_name,
+    zones: zones_count,
+    plan: PlanDto::from(&chosen),
+  }))
+}
+
 // ── Router ──────────────────────────────────────────────────────────────────
 
 pub fn router() -> ApiRouter<AppState> {
-  ApiRouter::new().api_route(
-    "/api/plan",
-    post_with(plan, |op: TransformOperation| {
-      op.description(
-        "Given a PropertyRequirements, return a ranked list of \
-         candidate irrigation plans with full BOMs and rationales. \
-         Deterministic; catalog-driven.",
-      )
-    }),
-  )
+  ApiRouter::new()
+    .api_route(
+      "/api/plan",
+      post_with(plan, |op: TransformOperation| {
+        op.description(
+          "Given a PropertyRequirements, return a ranked list of \
+           candidate irrigation plans with full BOMs and rationales. \
+           Deterministic; catalog-driven.",
+        )
+      }),
+    )
+    .api_route(
+      "/api/plan/apply",
+      post_with(apply, |op: TransformOperation| {
+        op.description(
+          "Run the recommender for the provided requirements, then \
+           replace the running simulator's property + world with the \
+           plan at `plan_index` (0 = top-ranked).  Redirects the \
+           dashboard to the newly simulated property.",
+        )
+      }),
+    )
 }

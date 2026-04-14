@@ -54,6 +54,8 @@ import Http
 type alias Model =
     { form : FormState
     , plans : PlanStatus
+    , applying : Maybe Int
+    , applyResult : Maybe (Result String Api.PlanApplyResult)
     }
 
 
@@ -97,6 +99,8 @@ init : ( Model, Cmd Msg )
 init =
     ( { form = initialForm
       , plans = Idle
+      , applying = Nothing
+      , applyResult = Nothing
       }
     , Cmd.none
     )
@@ -153,6 +157,8 @@ type Msg
     | SetZoneField Int Int ZoneField String
     | SubmitForm
     | GotPlans (Result Http.Error Api.PlanResponse)
+    | ApplyPlan Int
+    | GotApplyResult (Result Http.Error Api.PlanApplyResult)
 
 
 type YardField
@@ -325,6 +331,29 @@ update msg model =
         GotPlans (Err err) ->
             ( { model | plans = PlansFailed (httpErrToString err) }, Cmd.none )
 
+        ApplyPlan idx ->
+            case toPlanRequest model.form of
+                Ok req ->
+                    ( { model | applying = Just idx, applyResult = Nothing }
+                    , Api.postApplyPlan req idx GotApplyResult
+                    )
+
+                Err errMsg ->
+                    ( { model | applyResult = Just (Err errMsg) }, Cmd.none )
+
+        GotApplyResult (Ok result) ->
+            ( { model | applying = Nothing, applyResult = Just (Ok result) }
+            , Cmd.none
+            )
+
+        GotApplyResult (Err err) ->
+            ( { model
+                | applying = Nothing
+                , applyResult = Just (Err (httpErrToString err))
+              }
+            , Cmd.none
+            )
+
 
 setFormField : (FormState -> FormState) -> FormState -> FormState
 setFormField f s =
@@ -489,8 +518,34 @@ view model =
             , text "hardware plans ranked by fit."
             ]
         , section [ Attr.class "designer-form" ] [ viewForm model.form ]
-        , section [ Attr.class "designer-plans" ] [ viewPlans model.plans ]
+        , section [ Attr.class "designer-plans" ]
+            [ viewApplyStatus model.applyResult
+            , viewPlans model.applying model.plans
+            ]
         ]
+
+
+viewApplyStatus : Maybe (Result String Api.PlanApplyResult) -> Html Msg
+viewApplyStatus result =
+    case result of
+        Nothing ->
+            text ""
+
+        Just (Ok r) ->
+            div [ Attr.class "plan-apply-ok" ]
+                [ text
+                    ("Simulator now running plan for property "
+                        ++ r.propertyName
+                        ++ " ("
+                        ++ String.fromInt r.zones
+                        ++ " zones).  "
+                    )
+                , Html.a [ Attr.href "/" ] [ text "Open the dashboard →" ]
+                ]
+
+        Just (Err m) ->
+            div [ Attr.class "plan-apply-err" ]
+                [ text ("Failed to apply plan: " ++ m) ]
 
 
 viewForm : FormState -> Html Msg
@@ -624,8 +679,8 @@ textInput v msg =
         []
 
 
-viewPlans : PlanStatus -> Html Msg
-viewPlans status =
+viewPlans : Maybe Int -> PlanStatus -> Html Msg
+viewPlans applying status =
     case status of
         Idle ->
             p [ Attr.class "plans-idle" ]
@@ -646,12 +701,25 @@ viewPlans status =
         PlansLoaded plans ->
             div [ Attr.class "plans-grid" ]
                 (h2 [] [ text "Candidate plans" ]
-                    :: List.map viewPlanCard plans
+                    :: List.indexedMap (viewPlanCard applying) plans
                 )
 
 
-viewPlanCard : Api.Plan -> Html Msg
-viewPlanCard plan =
+viewPlanCard : Maybe Int -> Int -> Api.Plan -> Html Msg
+viewPlanCard applying idx plan =
+    let
+        btnLabel : String
+        btnLabel =
+            if applying == Just idx then
+                "Applying…"
+
+            else
+                "Simulate this plan"
+
+        btnDisabled : Bool
+        btnDisabled =
+            applying /= Nothing
+    in
     div [ Attr.class "plan-card" ]
         [ h3 [] [ text plan.planId ]
         , p [ Attr.class "plan-controller" ]
@@ -670,6 +738,12 @@ viewPlanCard plan =
             [ summary [] [ text ("Bill of materials (" ++ String.fromInt (List.length plan.bom.lines) ++ " lines)") ]
             , viewBom plan.bom
             ]
+        , button
+            [ Attr.class "btn btn-primary plan-apply-btn"
+            , Attr.disabled btnDisabled
+            , onClick (ApplyPlan idx)
+            ]
+            [ text btnLabel ]
         ]
 
 

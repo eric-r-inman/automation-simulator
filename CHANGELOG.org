@@ -3,6 +3,19 @@
 
 * Upcoming
 
+- Phase 14a plan-apply bridge.  =POST /api/plan/apply= takes the
+  same =PlanRequest= as =POST /api/plan= plus a =plan_index=,
+  runs the recommender, and replaces the running simulator's
+  property + world with the selected plan's validated
+  =PropertyBundle=.  Dashboard, zone CRUD, and sensor routes all
+  start serving the new property immediately.
+- Designer UI gains a "Simulate this plan" button on every
+  candidate card.  Clicking it calls =/api/plan/apply=, disables
+  the other buttons until the apply completes, and renders a
+  success / failure banner with a link to the dashboard.
+- Tests: +2 server integration tests (apply swaps the running
+  property; out-of-range =plan_index= returns 400).  Workspace
+  total 137/137.
 - Phase 13b designer UI.  New =/designer= route in the Elm SPA
   (=frontend/src/Page/Designer.elm=) drives the catalog-driven
   planner from a form: property metadata, budget, smart-preference
