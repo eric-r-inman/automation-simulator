@@ -227,10 +227,20 @@ impl PropertyBundle {
       }
     }
     for c in &controllers {
-      if !catalog.controllers.contains_key(&c.model_id) {
-        return Err(SeedError::UnknownControllerModel {
+      let model = catalog.controllers.get(&c.model_id).ok_or_else(|| {
+        SeedError::UnknownControllerModel {
           controller: c.id.clone(),
           model: c.model_id.clone(),
+        }
+      })?;
+      // Catch over-capacity wiring at load time so the user sees
+      // it before the simulator runs against an impossible setup.
+      if c.zone_assignments.len() as i64 > model.max_zones {
+        return Err(SeedError::ControllerOverCapacity {
+          controller: c.id.clone(),
+          model: c.model_id.clone(),
+          assigned: c.zone_assignments.len(),
+          max_zones: model.max_zones,
         });
       }
     }

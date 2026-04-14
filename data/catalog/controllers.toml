@@ -1,8 +1,8 @@
 # Irrigation controllers supported by the simulator.
 #
-# v0.1 seeds a single generic 6-zone 24 VAC controller.  v0.3 grows
-# this file to include additional makes and models; the domain model
-# and engine do not change.
+# Add a row here to make a controller pickable in the dashboard's
+# zone editor and the v0.3 planner.  Field reference lives at
+# crates/lib/src/catalog/models.rs::ControllerModel.
 
 [example-24v-controller]
 id = "example-24v-controller"
@@ -11,4 +11,67 @@ manufacturer = "Example Manufacturer"
 price_usd = 105.00
 max_zones = 6
 valve_voltage_ac = 24.0
-notes = "Stand-in for the make/model the example property actually runs; swap to real hardware rows in v0.3 without touching code."
+notes = "Stand-in for an unbranded 6-zone controller."
+
+[opensprinkler-os-pi]
+id = "opensprinkler-os-pi"
+name = "OpenSprinkler OS-Pi (Raspberry Pi HAT)"
+manufacturer = "OpenSprinkler"
+price_usd = 90.00
+max_zones = 24
+valve_voltage_ac = 24.0
+notes = "Open-source controller; mounts as a Raspberry Pi HAT.  Web UI on port 8080.  Local HTTP API."
+
+[rachio-3-8z]
+id = "rachio-3-8z"
+name = "Rachio 3 Smart Sprinkler Controller (8 Zone)"
+manufacturer = "Rachio"
+price_usd = 230.00
+max_zones = 8
+valve_voltage_ac = 24.0
+notes = "Wi-Fi smart controller; weather-based scheduling; cloud + local API."
+
+[rachio-3-16z]
+id = "rachio-3-16z"
+name = "Rachio 3 Smart Sprinkler Controller (16 Zone)"
+manufacturer = "Rachio"
+price_usd = 300.00
+max_zones = 16
+valve_voltage_ac = 24.0
+notes = "Same as Rachio 3 but with 16 zones for larger properties."
+
+[hunter-pro-c-12]
+id = "hunter-pro-c-12"
+name = "Hunter Pro-C (12 Station, Modular)"
+manufacturer = "Hunter Industries"
+price_usd = 200.00
+max_zones = 12
+valve_voltage_ac = 24.0
+notes = "Modular controller; expandable from 4 to 16 stations.  Indoor + outdoor cabinets."
+
+[orbit-b-hyve-12]
+id = "orbit-b-hyve-12"
+name = "Orbit B-hyve Smart 12-Zone Controller"
+manufacturer = "Orbit"
+price_usd = 110.00
+max_zones = 12
+valve_voltage_ac = 24.0
+notes = "Wi-Fi + Bluetooth smart controller.  Indoor mount."
+
+[rain-bird-esp-me]
+id = "rain-bird-esp-me"
+name = "Rain Bird ESP-Me Modular Controller (4-22 Zone)"
+manufacturer = "Rain Bird"
+price_usd = 180.00
+max_zones = 22
+valve_voltage_ac = 24.0
+notes = "Modular base + 3-zone expansion modules; LNK Wi-Fi optional."
+
+[generic-24vac-6zone]
+id = "generic-24vac-6zone"
+name = "Generic Indoor 24 VAC 6-Zone Controller"
+manufacturer = "Generic"
+price_usd = 60.00
+max_zones = 6
+valve_voltage_ac = 24.0
+notes = "Catch-all for unbranded controllers a user already owns."

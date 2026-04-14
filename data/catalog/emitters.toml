@@ -58,3 +58,49 @@ flow_gph = 20.0
 min_inlet_psi = 20.0
 pressure_compensating = false
 notes = "Trees and tree basins."
+
+[netafim-techline-cv-12in]
+id = "netafim-techline-cv-12in"
+name = "Netafim Techline CV, 12\" Spacing, 0.6 GPH"
+manufacturer = "Netafim"
+price_usd_per_100 = 65.00
+shape = "inline-drip"
+flow_gph = 0.6
+min_inlet_psi = 7.0
+pressure_compensating = true
+inline_spacing_inches = 12.0
+notes = "Industry-standard pressure-compensating inline drip with built-in check valve.  Wide flow tolerance."
+
+[netafim-techline-cv-18in]
+id = "netafim-techline-cv-18in"
+name = "Netafim Techline CV, 18\" Spacing, 0.6 GPH"
+manufacturer = "Netafim"
+price_usd_per_100 = 60.00
+shape = "inline-drip"
+flow_gph = 0.6
+min_inlet_psi = 7.0
+pressure_compensating = true
+inline_spacing_inches = 18.0
+notes = "Wider spacing for shrubs and lower-density plantings."
+
+[dramm-1gph-pc]
+id = "dramm-1gph-pc"
+name = "Dramm 1.0 GPH Pressure-Compensating Drip Emitter"
+manufacturer = "Dramm"
+price_usd_per_100 = 28.00
+shape = "point-emitter"
+flow_gph = 1.0
+min_inlet_psi = 10.0
+pressure_compensating = true
+notes = "Common professional-grade replacement for the generic 1-GPH-PC emitter."
+
+[rain-bird-xeri-1gph]
+id = "rain-bird-xeri-1gph"
+name = "Rain Bird Xeri-Bird 8 1.0 GPH Emitter"
+manufacturer = "Rain Bird"
+price_usd_per_100 = 32.00
+shape = "point-emitter"
+flow_gph = 1.0
+min_inlet_psi = 10.0
+pressure_compensating = true
+notes = "Pressure-compensating point emitter widely available at irrigation-supply stores."

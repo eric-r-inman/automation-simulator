@@ -3,6 +3,28 @@
 
 * Upcoming
 
+- Phase 12 catalog breadth.  Grow =data/catalog/= so the
+  dropdowns and the v0.3 planner have real choices to pick
+  from.  +7 controllers (now 8: OpenSprinkler OS-Pi, Rachio 3
+  8/16-zone, Hunter Pro-C, Orbit B-hyve, Rain Bird ESP-Me,
+  generic 24 VAC, plus the original example).  +5 sensors (now
+  7: Ecowitt GW2000 gateway, Ecowitt WH51 soil, Davis Vantage
+  Vue soil, Rachio Wireless Flow Meter, generic resistive).
+  +3 weather stations (now 4: Ecowitt WS90, Davis Vantage Vue,
+  Ambient WS-2902).  +3 manifolds (now 4: Rain Bird HV300,
+  Orbit 3-zone, Hunter ICV).  +4 emitters (now 9: Netafim
+  Techline CV in 12"/18" spacing, Dramm 1 GPH PC, Rain Bird
+  Xeri-Bird).  +3 pressure regulators (now 4).  +2 backflow
+  preventers (now 3).
+- Add the controller-capacity cross-validator at property load:
+  =SeedError::ControllerOverCapacity= fires when a controller
+  is wired to more zones than its catalog model allows.  Catches
+  a real planning mistake before the simulator starts.
+- Add three insta snapshot tests
+  (=crates/lib/tests/catalog_snapshot.rs=) so the seeded catalog
+  row counts and the controller / emitter id lists are pinned;
+  PRs that grow the catalog must accept the snapshot under
+  review.
 - Wire zone CRUD into the dashboard.  Each zone card gains
   =Edit= and =Delete= buttons; a =+ Add zone= button at the top
   of the Zones section opens a modal form with dropdowns for

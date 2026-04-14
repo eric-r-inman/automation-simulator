@@ -85,6 +85,16 @@ pub enum SeedError {
     yard: YardId,
   },
 
+  #[error(
+    "controller {controller} (model {model}) is wired to {assigned} zones but the model only supports {max_zones}"
+  )]
+  ControllerOverCapacity {
+    controller: ControllerInstanceId,
+    model: ControllerModelId,
+    assigned: usize,
+    max_zones: i64,
+  },
+
   // ── Cross-references against the catalog ──────────────────────────────────
   #[error(
     "zone {zone} references soil type {soil_type} which is not in the catalog"

@@ -12,3 +12,39 @@ measures_wind = true
 measures_rain = true
 measures_solar = true
 notes = "Property-level station, mounted on a pole."
+
+[ecowitt-ws90]
+id = "ecowitt-ws90"
+name = "Ecowitt WS90 7-in-1 Weather Sensor"
+manufacturer = "Ecowitt"
+price_usd = 130.00
+measures_temperature = true
+measures_humidity = true
+measures_wind = true
+measures_rain = true
+measures_solar = true
+notes = "No moving parts; haptic rain sensor.  Pairs with Ecowitt GW2000 gateway."
+
+[davis-vantage-vue]
+id = "davis-vantage-vue"
+name = "Davis Vantage Vue"
+manufacturer = "Davis Instruments"
+price_usd = 395.00
+measures_temperature = true
+measures_humidity = true
+measures_wind = true
+measures_rain = true
+measures_solar = false
+notes = "Premium residential weather station; integrated sensor suite plus indoor console."
+
+[ambient-ws-2902]
+id = "ambient-ws-2902"
+name = "Ambient Weather WS-2902"
+manufacturer = "Ambient Weather"
+price_usd = 200.00
+measures_temperature = true
+measures_humidity = true
+measures_wind = true
+measures_rain = true
+measures_solar = true
+notes = "Wi-Fi station + console; integrates with Weather Underground / PWSWeather."

@@ -1,0 +1,13 @@
+---
+source: crates/lib/tests/catalog_snapshot.rs
+assertion_line: 51
+expression: ids
+---
+- example-24v-controller
+- generic-24vac-6zone
+- hunter-pro-c-12
+- opensprinkler-os-pi
+- orbit-b-hyve-12
+- rachio-3-16z
+- rachio-3-8z
+- rain-bird-esp-me

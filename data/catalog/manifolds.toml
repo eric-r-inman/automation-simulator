@@ -10,3 +10,30 @@ price_usd = 40.00
 zone_capacity = 3
 valve_voltage_ac = 24.0
 notes = "24 VAC solenoids included."
+
+[rain-bird-hv300-3z]
+id = "rain-bird-hv300-3z"
+name = "Rain Bird HV300 3-Zone Manifold"
+manufacturer = "Rain Bird"
+price_usd = 80.00
+zone_capacity = 3
+valve_voltage_ac = 24.0
+notes = "Pre-assembled 3-valve manifold with 24 VAC solenoids."
+
+[orbit-3-zone-manifold]
+id = "orbit-3-zone-manifold"
+name = "Orbit 3-Valve Pre-Assembled Manifold"
+manufacturer = "Orbit"
+price_usd = 35.00
+zone_capacity = 3
+valve_voltage_ac = 24.0
+notes = "Common big-box-store manifold; 1\" inlet."
+
+[hunter-icv-4z]
+id = "hunter-icv-4z"
+name = "Hunter ICV 4-Valve Manifold (Custom Assembly)"
+manufacturer = "Hunter Industries"
+price_usd = 160.00
+zone_capacity = 4
+valve_voltage_ac = 24.0
+notes = "Commercial-grade ICV valves; 4 in a custom-plumbed manifold.  Higher flow and longer life than residential rigs."

@@ -1,0 +1,16 @@
+---
+source: crates/lib/tests/catalog_snapshot.rs
+assertion_line: 38
+expression: counts
+---
+backflow_preventers: 3
+controllers: 8
+drip_lines: 2
+emitters: 9
+manifolds: 4
+pressure_regulators: 4
+sensors: 7
+soil_types: 4
+species: 8
+valves: 0
+weather_stations: 4
