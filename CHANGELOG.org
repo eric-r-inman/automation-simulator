@@ -3,6 +3,20 @@
 
 * Upcoming
 
+- Add the deterministic simulation engine under
+  =crates/lib/src/engine/=: =SimClock= + =SimInstant= + =SimDuration=
+  for simulated time, =Climatology= + =WeatherModel= for monthly
+  climatology with seeded stochastic rain, =soil_step= implementing
+  the per-zone water-balance ODE (inflow − ET − drainage, clamped
+  to [0, saturation]), =zone_inflow_mm_per_hour= converting
+  catalog-level GPH into rain-equivalent flux, and =SimWorld::advance=
+  stepping 1-minute sub-steps with per-zone valve state, soil state,
+  and a recorded time-series history.  Ships three integration
+  tests: a 30-day Portland-July reference scenario that asserts
+  moisture stays in the plant-stress range plus =insta= snapshot of
+  the daily series, and a =proptest= property that runs 1 000
+  random inflow/ET combinations without ever producing NaN,
+  negative moisture, or moisture above saturation.
 - Add the hardware and species catalog at =crates/lib/src/catalog/=
   plus seed rows under =data/catalog/=.  Each category (controllers,
   sensors, weather stations, manifolds, valves, emitters, pressure
