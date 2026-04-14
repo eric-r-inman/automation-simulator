@@ -76,6 +76,8 @@
     in [
       rust
       pkgs.cargo-sweep
+      # sqlx-cli drives migration generation and offline-mode prepare.
+      pkgs.sqlx-cli
       pkgs.pkg-config
       pkgs.openssl
       pkgs.jq
