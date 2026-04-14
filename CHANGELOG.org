@@ -3,6 +3,19 @@
 
 * Upcoming
 
+* v0.1.0 (2026-04-14)
+
+First simulator-only release.  No real-hardware drivers and no
+mix-and-match planner yet (those are v0.2 and v0.3).  The full
+v0.1 pipeline lands here: domain model, hardware + species
+catalog, deterministic simulation engine, SQLite persistence,
+property-fixture loader + =cli seed=, =Controller= /
+=SensorSource= traits with simulated implementations, Axum
+server with a typed sim API, Elm dashboard, and an end-to-end
+demo backed by a 20-day scenario regression test.
+
+** Engineering
+
 - Add the Phase 9 demo + scenario regression.  =just demo= builds
   the Elm bundle and runs the server pre-loaded with the example
   property; opens at =http://127.0.0.1:3737/= for one-shot manual
