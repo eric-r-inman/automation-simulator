@@ -3,6 +3,18 @@
 
 * Upcoming
 
+- Add the SQLite persistence layer at =crates/lib/src/db/= and
+  =crates/lib/migrations/=.  One STRICT-mode init migration sets up
+  every table the v0.1–v0.3 pipeline needs (property, yard, spigot,
+  manifold, zone, plant, controller_instance, sensor_instance,
+  sensor_reading, watering_log, schedule_item, sim_run, sim_event,
+  property_design); every row carries property_id so v0.3
+  multi-property storage is a data change, not a migration.  The
+  =SimDb= wrapper owns a sqlx SqlitePool, runs migrations through
+  the embedded =sqlx::migrate!= macro, and exposes typed
+  insert/select helpers keyed to row-type structs.  Semantic
+  =DbOpenError= / =MigrationError= / =QueryError= name the
+  operation that failed.
 - Add the deterministic simulation engine under
   =crates/lib/src/engine/=: =SimClock= + =SimInstant= + =SimDuration=
   for simulated time, =Climatology= + =WeatherModel= for monthly
