@@ -1,10 +1,17 @@
 module Api exposing
-    ( Catalog
+    ( BomLine
+    , Catalog
     , CatalogEmitter
     , CatalogSoilType
     , CatalogSpecies
     , DeletedResult
     , Manifold
+    , Plan
+    , PlanBom
+    , PlanRequest
+    , PlanResponse
+    , PlanYardInput
+    , PlanZoneInput
     , Property
     , Reading
     , ResetResult
@@ -31,6 +38,7 @@ module Api exposing
     , fetchWeather
     , fetchZones
     , postCreateZone
+    , postPlan
     , postReset
     , postRunZone
     , postStep
@@ -253,6 +261,71 @@ type alias DeletedResult =
 
 
 
+-- ── Planner types ─────────────────────────────────────────────────────────
+
+
+type alias PlanRequest =
+    { propertyId : String
+    , propertyName : String
+    , climateZone : String
+    , yards : List PlanYardInput
+    , budgetUsd : Maybe Float
+    , preferSmartController : Bool
+    , requirePressureCompensating : Bool
+    , soilTypeId : String
+    , topN : Int
+    }
+
+
+type alias PlanYardInput =
+    { id : String
+    , name : String
+    , areaSqFt : Float
+    , mainsPressurePsi : Float
+    , zones : List PlanZoneInput
+    }
+
+
+type alias PlanZoneInput =
+    { nameSuffix : String
+    , plantKind : String
+    , areaSqFt : Float
+    }
+
+
+type alias PlanResponse =
+    { plans : List Plan
+    }
+
+
+type alias Plan =
+    { planId : String
+    , controllerModelId : String
+    , controllerMaxZones : Int
+    , score : Float
+    , rationale : List String
+    , bom : PlanBom
+    }
+
+
+type alias PlanBom =
+    { lines : List BomLine
+    , totalUsd : Float
+    }
+
+
+type alias BomLine =
+    { category : String
+    , catalogId : String
+    , displayName : String
+    , manufacturer : String
+    , quantity : Int
+    , unitPriceUsd : Float
+    , lineTotalUsd : Float
+    }
+
+
+
 -- ── HTTP commands ─────────────────────────────────────────────────────────
 
 
@@ -367,6 +440,60 @@ postUpdateZone zoneId req toMsg =
         , timeout = Nothing
         , tracker = Nothing
         }
+
+
+postPlan : PlanRequest -> (Result Http.Error PlanResponse -> msg) -> Cmd msg
+postPlan req toMsg =
+    Http.post
+        { url = "/api/plan"
+        , body = Http.jsonBody (planRequestEncoder req)
+        , expect = Http.expectJson toMsg planResponseDecoder
+        }
+
+
+planRequestEncoder : PlanRequest -> Encode.Value
+planRequestEncoder req =
+    let
+        budget =
+            case req.budgetUsd of
+                Just b ->
+                    [ ( "budget_usd", Encode.float b ) ]
+
+                Nothing ->
+                    []
+    in
+    Encode.object
+        ([ ( "property_id", Encode.string req.propertyId )
+         , ( "property_name", Encode.string req.propertyName )
+         , ( "climate_zone", Encode.string req.climateZone )
+         , ( "yards", Encode.list planYardEncoder req.yards )
+         , ( "prefer_smart_controller", Encode.bool req.preferSmartController )
+         , ( "require_pressure_compensating", Encode.bool req.requirePressureCompensating )
+         , ( "soil_type_id", Encode.string req.soilTypeId )
+         , ( "top_n", Encode.int req.topN )
+         ]
+            ++ budget
+        )
+
+
+planYardEncoder : PlanYardInput -> Encode.Value
+planYardEncoder y =
+    Encode.object
+        [ ( "id", Encode.string y.id )
+        , ( "name", Encode.string y.name )
+        , ( "area_sq_ft", Encode.float y.areaSqFt )
+        , ( "mains_pressure_psi", Encode.float y.mainsPressurePsi )
+        , ( "zones", Encode.list planZoneEncoder y.zones )
+        ]
+
+
+planZoneEncoder : PlanZoneInput -> Encode.Value
+planZoneEncoder z =
+    Encode.object
+        [ ( "name_suffix", Encode.string z.nameSuffix )
+        , ( "plant_kind", Encode.string z.plantKind )
+        , ( "area_sq_ft", Encode.float z.areaSqFt )
+        ]
 
 
 deleteZone : String -> (Result Http.Error DeletedResult -> msg) -> Cmd msg
@@ -623,3 +750,39 @@ deletedResultDecoder : Decoder DeletedResult
 deletedResultDecoder =
     Decode.map DeletedResult
         (Decode.field "zone_id" Decode.string)
+
+
+planResponseDecoder : Decoder PlanResponse
+planResponseDecoder =
+    Decode.map PlanResponse
+        (Decode.field "plans" (Decode.list planDecoder))
+
+
+planDecoder : Decoder Plan
+planDecoder =
+    Decode.map6 Plan
+        (Decode.field "plan_id" Decode.string)
+        (Decode.field "controller_model_id" Decode.string)
+        (Decode.field "controller_max_zones" Decode.int)
+        (Decode.field "score" Decode.float)
+        (Decode.field "rationale" (Decode.list Decode.string))
+        (Decode.field "bom" planBomDecoder)
+
+
+planBomDecoder : Decoder PlanBom
+planBomDecoder =
+    Decode.map2 PlanBom
+        (Decode.field "lines" (Decode.list bomLineDecoder))
+        (Decode.field "total_usd" Decode.float)
+
+
+bomLineDecoder : Decoder BomLine
+bomLineDecoder =
+    Decode.map7 BomLine
+        (Decode.field "category" Decode.string)
+        (Decode.field "catalog_id" Decode.string)
+        (Decode.field "display_name" Decode.string)
+        (Decode.field "manufacturer" Decode.string)
+        (Decode.field "quantity" Decode.int)
+        (Decode.field "unit_price_usd" Decode.float)
+        (Decode.field "line_total_usd" Decode.float)

@@ -3,6 +3,21 @@
 
 * Upcoming
 
+- Phase 13b designer UI.  New =/designer= route in the Elm SPA
+  (=frontend/src/Page/Designer.elm=) drives the catalog-driven
+  planner from a form: property metadata, budget, smart-preference
+  and pressure-comp toggles, and a nested list of yards each with
+  their own list of zones (plant kind, name suffix, area).  "+ Add
+  yard" and "+ Add zone" buttons expand the form; "Remove" buttons
+  on each row keep iteration cheap.  Submit POSTs =/api/plan= and
+  renders up to N candidate plans side by side, each with its
+  controller, score, BOM total, rationale bullets, and a
+  collapsible full bill of materials.  Clear error text whenever
+  the form or the server rejects the request.
+- =Api.elm= gains =PlanRequest=, =PlanResponse=, =Plan=, =PlanBom=,
+  =BomLine=, plus =postPlan= and the matching encoders/decoders.
+- Top-level nav gains a "Designer" link; =Main.elm= routes
+  =/designer= to the new page.
 - Phase 13a catalog-driven planner (backend).  New
   =crates/lib/src/planner/= module: =PropertyRequirements= plus
   a deterministic =planner::recommend= that enumerates up to
