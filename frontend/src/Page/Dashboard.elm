@@ -14,7 +14,6 @@ import Html.Events exposing (onClick)
 import Http
 import Widget.SimControls as SimControls
 import Widget.Weather as Weather
-import Widget.YardMap as YardMap
 import Widget.ZoneCard as ZoneCard
 
 
@@ -317,15 +316,6 @@ viewLoaded model property state zonesResponse =
                 , isBusy = model.busy
                 }
             , Weather.view state.weather
-            ]
-        , section [ Attr.class "dashboard-map" ]
-            [ h2 [] [ text "Yard map" ]
-            , YardMap.view
-                { property = property
-                , state = state
-                , onClickZone = FocusZone
-                , focusedZoneId = model.focusedZoneId
-                }
             ]
         , section [ Attr.class "dashboard-zones" ]
             [ h2 [] [ text "Zones" ]

@@ -3,6 +3,14 @@
 
 * Upcoming
 
+- Drop the dashboard's =Yard map= section.  The per-zone cards
+  carry the same data without the SVG layout overhead, and the
+  layout was a fixture-keyed approximation rather than the
+  property's actual geometry.  Removes =Widget/YardMap.elm=, the
+  corresponding =dashboard-map= section in =Page/Dashboard.elm=,
+  and the =elm/svg 1.0.1= dependency from =elm.json= +
+  =elm-srcs.nix= + =registry.dat=.
+
 * v0.1.2 (2026-04-14)
 
 Adds the =description= and =readme= manifest fields to the lib
