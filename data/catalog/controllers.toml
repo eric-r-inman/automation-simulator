@@ -1,0 +1,14 @@
+# Irrigation controllers supported by the simulator.
+#
+# v0.1 seeds a single generic 6-zone 24 VAC controller.  v0.3 grows
+# this file to include additional makes and models; the domain model
+# and engine do not change.
+
+[example-24v-controller]
+id = "example-24v-controller"
+name = "Generic 6-Zone 24 VAC Controller"
+manufacturer = "Example Manufacturer"
+price_usd = 105.00
+max_zones = 6
+valve_voltage_ac = 24.0
+notes = "Stand-in for the make/model the example property actually runs; swap to real hardware rows in v0.3 without touching code."

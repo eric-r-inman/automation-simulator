@@ -1,0 +1,12 @@
+# Solenoid valve manifolds.  The example property uses two of the
+# generic 3-zone manifold, one per spigot; that placement lives in
+# the property fixture, not here.
+
+[generic-3zone-manifold]
+id = "generic-3zone-manifold"
+name = "Generic 3-Zone Solenoid Manifold"
+manufacturer = "Example Manufacturer"
+price_usd = 40.00
+zone_capacity = 3
+valve_voltage_ac = 24.0
+notes = "24 VAC solenoids included."

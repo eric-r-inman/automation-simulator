@@ -1,0 +1,40 @@
+# Soil types with the physics constants the Phase 3 moisture ODE
+# consumes.  VWC (volumetric water content) values are dimensionless
+# ratios in [0, 1].  Values sourced from standard USDA NRCS tables;
+# `notes` fields document the reference.
+
+[silty-clay-loam]
+id = "silty-clay-loam"
+name = "Silty Clay Loam"
+saturation_vwc = 0.48
+field_capacity_vwc = 0.36
+wilting_point_vwc = 0.17
+saturated_hydraulic_conductivity_mm_per_hr = 3.5
+notes = "Common Portland-area residential soil per Oregon State Extension."
+
+[loam]
+id = "loam"
+name = "Loam"
+saturation_vwc = 0.46
+field_capacity_vwc = 0.27
+wilting_point_vwc = 0.12
+saturated_hydraulic_conductivity_mm_per_hr = 13.0
+notes = "Balanced ideal for most plantings."
+
+[sandy-loam]
+id = "sandy-loam"
+name = "Sandy Loam"
+saturation_vwc = 0.44
+field_capacity_vwc = 0.18
+wilting_point_vwc = 0.08
+saturated_hydraulic_conductivity_mm_per_hr = 44.0
+notes = "Drains quickly; needs more frequent, shorter watering cycles."
+
+[clay-loam]
+id = "clay-loam"
+name = "Clay Loam"
+saturation_vwc = 0.47
+field_capacity_vwc = 0.33
+wilting_point_vwc = 0.18
+saturated_hydraulic_conductivity_mm_per_hr = 2.3
+notes = "Holds water well but drainage is slow; over-watering produces anaerobic zones."

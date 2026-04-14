@@ -20,11 +20,14 @@ uuid = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 
+[dependencies.toml]
+workspace = true
+
 [dev-dependencies]
 cargo-husky = { version = "1", default-features = false, features = ["user-hooks"] }
 proptest = { workspace = true }
 insta = { workspace = true }
-# Round-trip tests for the domain model's Raw candidate types need
-# the same (de)serializers the fixture loader will use in Phase 5.
-toml = { workspace = true }
 serde_json = { workspace = true }
+# Catalog loader tests build ad-hoc catalog directories so changes to
+# seeded fixtures cannot break loader invariants and vice versa.
+tempfile = { workspace = true }
