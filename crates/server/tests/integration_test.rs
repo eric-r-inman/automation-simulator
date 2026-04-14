@@ -57,7 +57,7 @@ fn build_sim_pieces() -> (
   Arc<dyn Controller>,
   Arc<dyn SensorSource>,
   Arc<Catalog>,
-  Arc<automation_simulator_lib::seed::PropertyBundle>,
+  Arc<tokio::sync::Mutex<automation_simulator_lib::seed::PropertyBundle>>,
 ) {
   let catalog = Arc::new(Catalog::load(catalog_dir()).expect("catalog"));
   let bundle =
@@ -78,7 +78,13 @@ fn build_sim_pieces() -> (
     Arc::new(SimulatedController::new(shared.clone()));
   let sensors: Arc<dyn SensorSource> =
     Arc::new(SimulatedSensorSource::new(shared.clone()));
-  (shared, controller, sensors, catalog, Arc::new(bundle))
+  (
+    shared,
+    controller,
+    sensors,
+    catalog,
+    Arc::new(tokio::sync::Mutex::new(bundle)),
+  )
 }
 
 // ── state helpers ────────────────────────────────────────────────────────────
@@ -179,6 +185,7 @@ fn app_with_sim_routes(state: AppState) -> Router {
   let sim_routes: Router = Router::<()>::from(
     routes::sim::router()
       .merge(routes::zones::router())
+      .merge(routes::zones_crud::router())
       .merge(routes::sensors::router())
       .merge(routes::weather::router())
       .with_state(state.clone()),
@@ -718,4 +725,232 @@ async fn test_weather_endpoint_returns_sample() {
   let body = json_get(&app, "/api/weather").await;
   let temp = body["temperature_c"].as_f64().unwrap();
   assert!((10.0..40.0).contains(&temp));
+}
+
+// ── zone CRUD route tests ───────────────────────────────────────────────────
+
+async fn json_patch(
+  app: &Router,
+  uri: &str,
+  body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+  let response = app
+    .clone()
+    .oneshot(
+      Request::builder()
+        .method("PATCH")
+        .uri(uri)
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap(),
+    )
+    .await
+    .expect("request");
+  let status = response.status();
+  let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+    .await
+    .expect("body");
+  let value = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+  (status, value)
+}
+
+async fn json_delete(
+  app: &Router,
+  uri: &str,
+) -> (StatusCode, serde_json::Value) {
+  let response = app
+    .clone()
+    .oneshot(
+      Request::builder()
+        .method("DELETE")
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap(),
+    )
+    .await
+    .expect("request");
+  let status = response.status();
+  let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+    .await
+    .expect("body");
+  let value = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+  (status, value)
+}
+
+#[tokio::test]
+async fn test_create_zone_then_appears_in_property() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, body) = json_post(
+    &app,
+    "/api/zones/definitions",
+    serde_json::json!({
+      "id": "zone-a4-new",
+      "yard_id": "yard-a",
+      "manifold_id": "manifold-a",
+      "plant_kind": "shrub",
+      "emitter_spec_id": "1gph-pc",
+      "soil_type_id": "silty-clay-loam",
+      "area_sq_ft": 80.0
+    }),
+  )
+  .await;
+  assert_eq!(status, StatusCode::OK, "create returned {body:?}");
+  assert_eq!(body["id"], "zone-a4-new");
+
+  let property = json_get(&app, "/api/sim/property").await;
+  let ids: Vec<String> = property["zones"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .map(|z| z["id"].as_str().unwrap().to_string())
+    .collect();
+  assert!(ids.contains(&"zone-a4-new".to_string()));
+
+  let zones = json_get(&app, "/api/zones").await;
+  assert_eq!(zones["zones"].as_array().unwrap().len(), 7);
+}
+
+#[tokio::test]
+async fn test_create_zone_rejects_unknown_yard() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, body) = json_post(
+    &app,
+    "/api/zones/definitions",
+    serde_json::json!({
+      "id": "zone-bad",
+      "yard_id": "ghost-yard",
+      "manifold_id": "manifold-a",
+      "plant_kind": "shrub",
+      "emitter_spec_id": "1gph-pc",
+      "soil_type_id": "silty-clay-loam",
+      "area_sq_ft": 80.0
+    }),
+  )
+  .await;
+  assert_eq!(status, StatusCode::BAD_REQUEST);
+  assert_eq!(body["kind"], "bad-request");
+}
+
+#[tokio::test]
+async fn test_create_zone_rejects_unknown_catalog_ref() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, body) = json_post(
+    &app,
+    "/api/zones/definitions",
+    serde_json::json!({
+      "id": "zone-bad",
+      "yard_id": "yard-a",
+      "manifold_id": "manifold-a",
+      "plant_kind": "shrub",
+      "emitter_spec_id": "ghost-emitter",
+      "soil_type_id": "silty-clay-loam",
+      "area_sq_ft": 80.0
+    }),
+  )
+  .await;
+  assert_eq!(status, StatusCode::BAD_REQUEST);
+  assert!(body["error"].as_str().unwrap().contains("emitter_spec_id"));
+}
+
+#[tokio::test]
+async fn test_create_zone_rejects_duplicate_id() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, body) = json_post(
+    &app,
+    "/api/zones/definitions",
+    serde_json::json!({
+      "id": "zone-a1-veggies",
+      "yard_id": "yard-a",
+      "manifold_id": "manifold-a",
+      "plant_kind": "shrub",
+      "emitter_spec_id": "1gph-pc",
+      "soil_type_id": "silty-clay-loam",
+      "area_sq_ft": 80.0
+    }),
+  )
+  .await;
+  assert_eq!(status, StatusCode::BAD_REQUEST);
+  assert!(body["error"].as_str().unwrap().contains("already exists"));
+}
+
+#[tokio::test]
+async fn test_get_zone_definition() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let body = json_get(&app, "/api/zones/definitions/zone-a1-veggies").await;
+  assert_eq!(body["id"], "zone-a1-veggies");
+  assert_eq!(body["plant_kind"], "veggie-bed");
+  assert_eq!(body["yard_id"], "yard-a");
+}
+
+#[tokio::test]
+async fn test_get_zone_definition_404() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let response = app
+    .oneshot(
+      Request::builder()
+        .uri("/api/zones/definitions/nope")
+        .body(Body::empty())
+        .unwrap(),
+    )
+    .await
+    .expect("request");
+  assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_patch_zone_updates_fields() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, body) = json_patch(
+    &app,
+    "/api/zones/definitions/zone-a1-veggies",
+    serde_json::json!({
+      "area_sq_ft": 999.0,
+      "notes": "new notes"
+    }),
+  )
+  .await;
+  assert_eq!(status, StatusCode::OK, "patch returned {body:?}");
+  assert_eq!(body["area_sq_ft"], 999.0);
+  assert_eq!(body["notes"], "new notes");
+}
+
+#[tokio::test]
+async fn test_patch_zone_rejects_bad_catalog_ref() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, body) = json_patch(
+    &app,
+    "/api/zones/definitions/zone-a1-veggies",
+    serde_json::json!({"emitter_spec_id": "ghost"}),
+  )
+  .await;
+  assert_eq!(status, StatusCode::BAD_REQUEST);
+  assert!(body["error"].as_str().unwrap().contains("emitter_spec_id"));
+}
+
+#[tokio::test]
+async fn test_delete_zone_removes_it() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, body) =
+    json_delete(&app, "/api/zones/definitions/zone-a1-veggies").await;
+  assert_eq!(status, StatusCode::OK, "delete returned {body:?}");
+  assert_eq!(body["zone_id"], "zone-a1-veggies");
+
+  let property = json_get(&app, "/api/sim/property").await;
+  let ids: Vec<String> = property["zones"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .map(|z| z["id"].as_str().unwrap().to_string())
+    .collect();
+  assert!(!ids.contains(&"zone-a1-veggies".to_string()));
+
+  let zones = json_get(&app, "/api/zones").await;
+  assert_eq!(zones["zones"].as_array().unwrap().len(), 5);
+}
+
+#[tokio::test]
+async fn test_delete_unknown_zone_404() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, _body) = json_delete(&app, "/api/zones/definitions/ghost").await;
+  assert_eq!(status, StatusCode::NOT_FOUND);
 }

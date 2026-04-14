@@ -131,6 +131,7 @@ fn create_app(state: AppState) -> Router {
   let sim_routes: Router = Router::<()>::from(
     routes::sim::router()
       .merge(routes::zones::router())
+      .merge(routes::zones_crud::router())
       .merge(routes::sensors::router())
       .merge(routes::weather::router())
       .with_state(state.clone()),

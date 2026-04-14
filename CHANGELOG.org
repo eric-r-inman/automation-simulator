@@ -3,6 +3,20 @@
 
 * Upcoming
 
+- Add zone-definition CRUD endpoints.  =POST /api/zones/definitions=
+  creates a zone, =PATCH /api/zones/definitions/{id}= edits one,
+  =DELETE /api/zones/definitions/{id}= removes one.  All three
+  validate against the property's existing yards/manifolds and the
+  hardware/species catalog before mutating; both the in-memory
+  =PropertyBundle= and the running =SimWorld= are updated
+  atomically (under their respective locks).  v0.1 keeps these
+  changes in memory only — restart reloads the property TOML.
+- Add =SimWorld::add_zone= / =update_zone= / =remove_zone= with a
+  new =SimWorldError::DuplicateZone= variant; soil + valve state
+  + recorded history are kept consistent on each mutation.
+- =AppState.property= moves from =Arc<PropertyBundle>= to
+  =Arc<tokio::sync::Mutex<PropertyBundle>>= so the CRUD routes
+  can mutate the property roster without restarting.
 - Drop the dashboard's =Yard map= section.  The per-zone cards
   carry the same data without the SVG layout overhead, and the
   layout was a fixture-keyed approximation rather than the
