@@ -43,7 +43,7 @@ captured in Phases 11–14 below.
 | Concern                  | Simulator (v0.1)                                                        | Real hardware (v0.2)                             | Planner / mix-and-match (v0.3)                                                                   |
 |--------------------------+-------------------------------------------------------------------------+--------------------------------------------------+--------------------------------------------------------------------------------------------------|
 | Property definition      | Single committed TOML fixture in =data/properties/=                     | Same fixture + live calibration overrides        | User-authored via UI; stored in SQLite; exportable as TOML                                       |
-| Hardware choice          | Hardcoded to the the example setup (OpenSprinkler OS-Pi, Ecowitt, etc.)        | Same as v0.1                                     | Selected from a catalog of supported hardware; recommendation engine proposes an initial picklist |
+| Hardware choice          | Hardcoded to the example setup (OpenSprinkler OS-Pi, Ecowitt, etc.)        | Same as v0.1                                     | Selected from a catalog of supported hardware; recommendation engine proposes an initial picklist |
 | Controller               | =SimulatedController= impl of the =Controller= trait                    | =OpenSprinklerController= speaking HTTP to OS-Pi | Any compatible =Controller= impl; the catalog declares which are supported                       |
 | Sensors                  | =SimulatedSensorSource= derived from the physics model                  | =EcowittSensorSource= receiving HTTP pushes      | Any compatible =SensorSource= impl; planner scores properties on sensor coverage                 |
 | Weather                  | Portland climatology + seeded stochastic rain events                    | =EcowittWeatherSource= (WS90 readings)           | User picks climatology by lat/long; real station optional                                        |
@@ -174,7 +174,7 @@ git.
    =curl http://localhost:3000/healthz= returns ={"status":"healthy"}=.
    =curl http://localhost:3000/scalar= serves the Scalar API UI.
 4. =git init && git add . && git commit -m "Initial commit"=.
-5. Push to =github.com/ericrinman/automation-simulator= (private or
+5. Push to =github.com/eric-r-inman/automation-simulator= (private or
    public — decide before first push).  Configure the three GitHub
    requirements from the template README (CARGO_REGISTRY_TOKEN, branch
    protection, auto-merge).
@@ -287,7 +287,7 @@ shape is final so v0.3 adds rows, not columns.
    OS-Pi HAT declares =requires: RaspberryPi=; the WH51 declares
    =gateway: EcowittGw2000=).
 3. =data/catalog/= directory with one TOML per category containing the
-   seeded rows.  v0.1 seeds exactly the the example setup: OS-Pi controller,
+   seeded rows.  v0.1 seeds exactly the example setup: OS-Pi controller,
    GW2000 gateway, 6× WH51 sensors, WS90 weather station, Rain Bird
    HV300 manifolds, Orbit backflow, 25 PSI regulator, Y-filter,
    1.0 GPH pressure-compensating emitters, 12"-spaced inline drip,
@@ -299,19 +299,19 @@ shape is final so v0.3 adds rows, not columns.
 5. =ScenarioWorld= / =SimWorld= takes =&Catalog= when it needs
    datasheet constants; nothing outside the catalog hardcodes them.
 6. Unit tests: a malformed compatibility reference fails loudly; a
-   valid catalog loads; the the example fixture resolves every id it names.
+   valid catalog loads; the example fixture resolves every id it names.
 
 ** Verification
 
 - =cargo test -p automation-simulator-lib catalog::= passes.
 - Loading =data/catalog/= in an integration test produces a non-empty
-  =Catalog= with every id the the example fixture references.
+  =Catalog= with every id the example fixture references.
 - Adding a synthetic =controllers/rachio-3.toml= row does /not/ break
   any tests — the catalog is additive.
 
 ** Human checkpoint
 
-- Skim the the example catalog entries against the docx Section 2 shopping
+- Skim the example catalog entries against the docx Section 2 shopping
   list.  Every listed model should have a row; every row should
   match the docx price to within 10%.
 
@@ -401,7 +401,7 @@ both v0.1 seed data and v0.3 user-authored properties.
    plants, controller-and-sensor instances, all referencing catalog
    ids from Phase 2.5.  The schema must describe an arbitrary
    residential property, not just the example.
-2. =data/properties/example-property.toml=: the the example setup expressed
+2. =data/properties/example-property.toml=: the example setup expressed
    in that schema.  Two yards, two spigots, 6 zones matching docx
    Section 3.1, manifolds, emitter choices, sensor/controller
    instances referencing the Phase 2.5 catalog.
@@ -604,7 +604,7 @@ and planner (v0.3).
   is published separately, or from git for now) works on a fresh
   machine.
 
-* Phase 11 (v0.2) — Real-hardware drivers for the the example deployment
+* Phase 11 (v0.2) — Real-hardware drivers for the example deployment
 
 Not targeted for v0.1, but the Phase 6 traits are designed with these
 impls in mind so the v0.2 work is additive.
@@ -733,7 +733,7 @@ several per-property pages.
 - Create a new property from the UI, generate plans, simulate one,
   persist it, and revisit it in a fresh browser session.
 - Elm compile stays warning-free; existing v0.1 dashboard continues
-  to work pointed at the the example property.
+  to work pointed at the example property.
 
 ** Human checkpoint
 
