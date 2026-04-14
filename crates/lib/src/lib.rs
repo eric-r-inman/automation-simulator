@@ -1,4 +1,5 @@
 pub mod catalog;
+pub mod engine;
 pub mod logging;
 pub mod sim;
 
