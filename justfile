@@ -1,3 +1,12 @@
+# `just` ≡ one-shot "does the whole thing work?"
+# Builds the Elm bundle, then starts the server pre-loaded with
+# the example property + catalog on http://127.0.0.1:3737/.
+# Ctrl+C to stop.
+default: demo
+
+# Shortest alias for the default demo flow.
+up: demo
+
 # Build both Rust and Elm.
 build: build-elm build-rust
 
@@ -16,6 +25,10 @@ test: build-elm test-rust
 test-rust:
     cargo test --workspace
 
+# Format every file treefmt knows about.
+fmt:
+    treefmt
+
 # Build Elm then run via cargo, forwarding all arguments.
 run *args: build-elm
     cargo run {{args}}
@@ -23,10 +36,10 @@ run *args: build-elm
 # Run the local demo: build the Elm bundle, then start the server
 # pre-loaded with the example property + catalog.  Open
 # http://127.0.0.1:3737/ in a browser to interact; Ctrl+C stops the
-# server.  Useful as a one-shot "does the whole thing work?" check.
+# server.
 demo: build-elm
     @echo ""
-    @echo "=== automation-simulator demo ==="
+    @echo "=== automation-simulator ==="
     @echo "Open http://127.0.0.1:3737/ in your browser; Ctrl+C to stop."
     @echo ""
     cargo run -p automation-simulator-server -- \

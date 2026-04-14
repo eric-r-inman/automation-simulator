@@ -24,7 +24,7 @@ use prometheus::{Encoder, IntCounter, Registry, TextEncoder};
 use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::json;
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 use thiserror::Error;
 use tower::ServiceBuilder;
 use tower_http::{
@@ -66,6 +66,12 @@ pub struct AppState {
   /// update.  Reads (e.g. `GET /api/sim/property`) lock briefly,
   /// clone, drop the lock — never hold across `.await`.
   pub property: Arc<tokio::sync::Mutex<PropertyBundle>>,
+  /// In-memory registry of properties the server has seen this
+  /// process.  The active one is mirrored into `property` + `world`
+  /// above; the rest are dormant bundles the user can activate
+  /// from the `/properties` page.  Not persisted across restarts
+  /// in v0.3 — a follow-up will move this to SQLite.
+  pub properties: Arc<tokio::sync::Mutex<BTreeMap<String, PropertyBundle>>>,
 }
 
 #[derive(Debug, Error)]
@@ -205,6 +211,10 @@ impl AppState {
     let sensors: Arc<dyn SensorSource> =
       Arc::new(SimulatedSensorSource::new(world.clone()));
 
+    let mut registry_map: BTreeMap<String, PropertyBundle> = BTreeMap::new();
+    registry_map
+      .insert(bundle.property.id.as_str().to_string(), bundle.clone());
+
     Ok(Self {
       registry: Arc::new(registry),
       request_counter,
@@ -215,6 +225,7 @@ impl AppState {
       sensors,
       catalog,
       property: Arc::new(tokio::sync::Mutex::new(bundle)),
+      properties: Arc::new(tokio::sync::Mutex::new(registry_map)),
     })
   }
 }

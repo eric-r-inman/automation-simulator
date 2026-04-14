@@ -1,0 +1,162 @@
+#+title:     Using automation-simulator
+#+language:  en
+
+* What this is
+
+automation-simulator is a browser-based workbench for sketching
+food-forest irrigation systems and watching them run in
+simulation.  You describe a property — yards, zones, plants,
+mains pressure, budget — and the simulator:
+
+1. Picks realistic hardware from a catalog of controllers,
+   sensors, manifolds, emitters, and regulators.
+2. Runs a soil-moisture + weather simulation against that
+   property and lets you open and close valves by hand or on a
+   schedule.
+3. Lets you compare candidate hardware plans side by side before
+   spending money.
+
+Nothing you do here touches real hardware.  It is a design and
+planning tool.
+
+* Starting it
+
+Inside the Nix development shell (=nix develop=), the shortest
+path is:
+
+#+begin_src sh :exports code
+just
+#+end_src
+
+That builds the Elm frontend, starts the server on
+http://127.0.0.1:3737/, and pre-loads the built-in example
+property.  =Ctrl+C= stops the server.
+
+Other aliases:
+
+| Command     | What it does                                       |
+|-------------+----------------------------------------------------|
+| ~just~      | Default — same as ~just demo~.                     |
+| ~just up~   | Alias for ~just demo~.                             |
+| ~just demo~ | Full build + run on port 3737.                     |
+| ~just build~| Build Rust + Elm; do not start the server.         |
+| ~just test~ | Build Elm, then run the full Rust test suite.      |
+| ~just fmt~  | Format every source file.                          |
+
+Then open [[http://127.0.0.1:3737/][http://127.0.0.1:3737/]] in a browser.
+
+* What you can do from the browser
+
+The top nav has four links:
+
+- *Dashboard* — the live view of the currently-active property.
+- *Properties* — list of properties the server knows about;
+  switch between them or delete ones you do not need.
+- *Designer* — sketch a new property, get ranked hardware plans,
+  and commit one to the simulator.
+- *API docs* — Scalar / OpenAPI reference for every HTTP route.
+
+** Dashboard
+
+Shows every zone of the active property as its own card:
+
+- Current soil moisture (volumetric water content, v/v).
+- Valve state (OPEN / closed) and total seconds the valve has
+  been open.
+- Plant kind and area.
+
+Each card has three actions:
+
+| Button    | Effect                                                 |
+|-----------+--------------------------------------------------------|
+| Run 5 min | Opens the valve for five simulated minutes.            |
+| Run 15 min| Opens the valve for fifteen simulated minutes.         |
+| Stop      | Closes the valve immediately.                          |
+
+Zones are editable:
+
+- =+ Add zone= opens a modal.  Pick a yard, manifold, plant
+  kind, emitter spec, and soil type from dropdowns populated
+  from the catalog; set an area and optional notes.  Submit and
+  the new zone appears on the dashboard immediately.
+- =Edit= on a card opens the same modal pre-filled.
+- =Delete= asks for confirmation, then removes the zone from
+  both the property and the running simulator.
+
+The Weather panel shows temperature, humidity, wind, solar, and
+rain for the current simulated time.  The Sim Controls let you
+step the clock forward by N minutes or reset the simulation to
+its starting state.
+
+** Designer (plan a new property)
+
+The Designer is a form that captures the user's intent:
+
+- Property id, name, and climate zone.
+- Budget (USD, optional) — plans over budget are ranked lower
+  but still returned.
+- Whether to prefer a smart (Wi-Fi, weather-aware) controller.
+- Whether to require pressure-compensating emitters.
+- Soil type id.
+- A list of yards, each with an id, name, area, mains pressure,
+  and its own list of zones (name suffix, plant kind, area).
+
+=+ Add yard= and =+ Add zone= grow the form; =Remove= buttons
+shrink it.  Clicking =Plan= POSTs to =/api/plan= and renders up
+to N candidate plans side by side:
+
+- The picked controller and its zone capacity.
+- A score (higher is better) — combines base, budget compliance,
+  smart-preference reward, and controller-capacity headroom.
+- Total estimated hardware cost.
+- A bullet-list rationale.
+- A collapsible bill of materials (category, item, qty, unit $,
+  line $).
+
+Each plan card has a *Simulate this plan* button.  Clicking it
+replaces the running simulator with that plan's property
+immediately; a success banner links back to the Dashboard.  The
+property is also saved to the in-memory Properties registry so
+you can switch back to it later.
+
+** Properties
+
+A list view of every property the server has seen this session.
+Each row shows the name, id, climate zone, zone/yard counts, and
+an =ACTIVE= badge if it is currently running.
+
+- =Open= on a dormant property activates it — the simulator
+  instantly starts serving that property on the Dashboard.
+- =Delete= removes a property from the registry after a
+  confirmation prompt.  You cannot delete the currently-active
+  property; activate a different one first.
+- =+ New property (Designer)= sends you to the Designer.
+
+* Where things live
+
+- =data/catalog/*.toml= — the hardware + biology catalog.  Add
+  a row here to expose a new controller, sensor, emitter, etc.
+  in the dropdowns.  The simulator treats this as the single
+  source of truth; nothing is hard-coded in the Rust source.
+- =data/properties/example-property.toml= — the starter
+  property loaded at boot.
+
+Edit these files and restart (=just=) to pick up catalog
+changes.
+
+* Known limits (v0.3)
+
+- The property registry is in-memory: restarting the server
+  wipes everything except the property loaded from
+  =data/properties/example-property.toml=.  A follow-up will
+  persist the registry to SQLite.
+- There is no per-candidate =/plans/:id= detail URL yet;
+  browsing plans happens inline in the Designer.
+- Real-hardware drivers (OpenSprinkler, Rachio, Ecowitt, etc.)
+  are in the catalog but not yet wired into live execution —
+  every run today uses the simulated controller + sensors.
+
+* Feedback loop
+
+Make a change, run =just test=, and drive the UI from
+http://127.0.0.1:3737/.  That is the loop.

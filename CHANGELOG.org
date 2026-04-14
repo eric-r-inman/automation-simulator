@@ -3,6 +3,32 @@
 
 * Upcoming
 
+- Phase 14b multi-property registry + Properties page.
+  =AppState= gains a =BTreeMap<String, PropertyBundle>=
+  registry beside the currently-active bundle.  Three new
+  routes: =GET /api/properties= lists everything the server
+  knows about (with an =active= flag per row),
+  =POST /api/properties/:id/activate= swaps the running
+  simulator to the named property, and
+  =DELETE /api/properties/:id= removes a dormant one from the
+  registry (refuses the active property with a 400).  Each
+  successful =POST /api/plan/apply= now also parks its bundle
+  in the registry so the user can switch back to it later.
+- Frontend: new =/properties= route wired through
+  =Page/Properties.elm=.  The list highlights the active
+  property, offers =Open= (activate) / =Delete= / =Dashboard →=
+  actions per row, and links to the Designer for creating a new
+  one.  Nav gains a "Properties" entry.
+- Ergonomics: =just= with no args now runs the demo.  Added
+  =just up= as a one-word shortcut, =just fmt=, and polished
+  the recipe docstrings so =just --list= reads cleanly.
+- Docs: new =USAGE.org= at the repo root — an end-user-facing
+  tour of the Dashboard, Designer, and Properties pages, with
+  the shortest path to a running demo up top.
+- Tests: +6 integration tests covering the registry routes
+  (initial state, apply registers + activates, activate swaps,
+  unknown = 404, delete-active = 400, delete-inactive
+  succeeds).  Workspace now 143/143.
 - Phase 14a plan-apply bridge.  =POST /api/plan/apply= takes the
   same =PlanRequest= as =POST /api/plan= plus a =plan_index=,
   runs the recommender, and replaces the running simulator's
