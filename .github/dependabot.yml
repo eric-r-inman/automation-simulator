@@ -33,6 +33,10 @@ updates:
       # explicitly migrate.
       - dependency-name: "rand"
         versions: [">=0.9"]
+      # rand_chacha 0.9 must move in lockstep with rand 0.9 (it
+      # consumes rand's traits); pin it with the same floor.
+      - dependency-name: "rand_chacha"
+        versions: [">=0.9"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
