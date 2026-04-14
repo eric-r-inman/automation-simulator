@@ -13,6 +13,26 @@ updates:
       patch-bumps:
         update-types:
           - "patch"
+    # Crates that have been intentionally pinned below the latest
+    # release because their newer majors require an API migration we
+    # have not scheduled yet.  Remove the corresponding entry once the
+    # migration is done (and typically in the same PR).
+    ignore:
+      - dependency-name: "schemars"
+        versions: [">=1.0"]
+      - dependency-name: "openidconnect"
+        versions: [">=4.0"]
+      - dependency-name: "sd-notify"
+        versions: [">=0.5"]
+      - dependency-name: "prometheus"
+        versions: [">=0.14"]
+      - dependency-name: "toml"
+        versions: [">=1.0"]
+      # rand 0.9 is a semver-major change despite the 0.x version; its
+      # trait surface moved (gen_range, Rng::gen, etc.).  Skip until we
+      # explicitly migrate.
+      - dependency-name: "rand"
+        versions: [">=0.9"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
