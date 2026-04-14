@@ -50,7 +50,7 @@ tower-http = { version = "0.6", features = ["trace", "cors", "fs", "set-header"]
 tempfile = "3"
 
 # OpenMetrics/Prometheus
-prometheus = "0.13"
+prometheus = "0.14"
 
 # OpenAPI
 aide = { version = "0.15", features = ["axum", "axum-json", "axum-query", "scalar", "macros"] }
