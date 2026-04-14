@@ -3,6 +3,19 @@
 
 * Upcoming
 
+- Add the hardware-abstraction traits under =crates/lib/src/hw/=:
+  =Controller= (open_zone / close_zone / list_zones / status) and
+  =SensorSource= (latest_reading / history / weather_now).  Both
+  are =async_trait= so =Arc<dyn ...>= works in =AppState=.  Ships
+  the =SimulatedController= and =SimulatedSensorSource= impls
+  backed by a shared =Arc<Mutex<SimWorld>>=; opening a zone through
+  the controller side shows up in the sensor side without any
+  cross-wiring.  Semantic =ControllerError= / =SensorError=
+  variants name the zone and the failing operation.  v0.2 drops
+  concrete real-hardware impls in alongside these without
+  touching consumers.
+- Tighten the dependabot ignore list: =rand_chacha >=0.9= is
+  pinned alongside =rand >=0.9= since they must move in lockstep.
 - Add the property-fixture loader at =crates/lib/src/seed/= and the
   =cli seed= subcommand.  Loader parses a property TOML file into
   validated domain types, cross-references it against the catalog

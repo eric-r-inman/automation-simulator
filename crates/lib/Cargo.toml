@@ -19,6 +19,11 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+# hw traits: async_trait decorator for dyn-compatibility.
+async-trait = { workspace = true }
+# tokio needed by hw::simulated for its async Mutex used to protect
+# the shared SimWorld state across async trait method calls.
+tokio = { workspace = true }
 # Used by the db layer for JSON-encoded columns (controller zone
 # assignments, sim-event payloads, property-design state) and shared
 # with the catalog loader.
@@ -34,6 +39,3 @@ insta = { workspace = true }
 # Catalog loader tests build ad-hoc catalog directories so changes to
 # seeded fixtures cannot break loader invariants and vice versa.
 tempfile = { workspace = true }
-# Round-trip db tests need a real tokio runtime because sqlx is
-# async-only.
-tokio = { workspace = true }
