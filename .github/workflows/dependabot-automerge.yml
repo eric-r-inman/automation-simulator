@@ -10,16 +10,11 @@ permissions:
 jobs:
   automerge:
     runs-on: ubuntu-latest
-    # Only patch-level bumps are auto-merged.  Major and minor bumps
-    # require a human to review any API migrations needed to keep the
-    # code compiling.  Background: seven dependabot PRs (#1-#7) were
-    # auto-merged shortly after repo creation, five of which were
-    # major or minor bumps that broke the server build (schemars 1.2,
-    # openidconnect 4, sd-notify 0.5, prometheus 0.14, toml 1.1).
-    #
-    # Once this repo has branch protection requiring the CI Test job
-    # (available on GitHub Pro for private repos, or on any public
-    # repo), relax this gate to `update-type != version-update:semver-major`.
+    # Patch and minor bumps auto-merge; major bumps require a human
+    # because they typically need API migrations in the same PR.
+    # `--auto` waits for the branch-protection required checks (Test
+    # and Formatting) to pass before actually merging, so a bump that
+    # breaks the build will sit open instead of landing.
     if: github.actor == 'dependabot[bot]'
     steps:
       - name: Fetch dependabot PR metadata
@@ -28,8 +23,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable auto-merge for patch updates only
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+      - name: Enable auto-merge for non-major bumps
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
