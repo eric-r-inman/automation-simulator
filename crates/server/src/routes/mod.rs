@@ -9,6 +9,7 @@
 //! this file.
 
 pub mod catalog;
+pub mod planner;
 pub mod sensors;
 pub mod sim;
 pub mod weather;

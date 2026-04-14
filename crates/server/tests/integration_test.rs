@@ -189,6 +189,7 @@ fn app_with_sim_routes(state: AppState) -> Router {
       .merge(routes::sensors::router())
       .merge(routes::weather::router())
       .merge(routes::catalog::router())
+      .merge(routes::planner::router())
       .with_state(state.clone()),
   );
   base_router(state).merge(sim_routes)
@@ -976,4 +977,62 @@ async fn test_delete_unknown_zone_404() {
   let app = app_with_sim_routes(state_without_frontend());
   let (status, _body) = json_delete(&app, "/api/zones/definitions/ghost").await;
   assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// ── /api/plan tests ─────────────────────────────────────────────────────────
+
+fn plan_req_body() -> serde_json::Value {
+  serde_json::json!({
+    "property_id": "test-property",
+    "property_name": "Test Property",
+    "climate_zone": "portland-or",
+    "budget_usd": 1500.0,
+    "prefer_smart_controller": true,
+    "require_pressure_compensating": false,
+    "soil_type_id": "silty-clay-loam",
+    "top_n": 3,
+    "yards": [{
+      "id": "yard-a",
+      "name": "Yard A",
+      "area_sq_ft": 800.0,
+      "mains_pressure_psi": 60.0,
+      "zones": [
+        {"name_suffix": "veggies", "plant_kind": "veggie-bed", "area_sq_ft": 100.0},
+        {"name_suffix": "shrubs",  "plant_kind": "shrub",      "area_sq_ft": 200.0}
+      ]
+    }]
+  })
+}
+
+#[tokio::test]
+async fn test_plan_returns_ranked_candidates() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, body) = json_post(&app, "/api/plan", plan_req_body()).await;
+  assert_eq!(status, StatusCode::OK);
+  let plans = body["plans"].as_array().expect("plans array");
+  assert!(!plans.is_empty(), "expected at least one plan");
+  for plan in plans {
+    assert!(plan["bom"]["total_usd"].as_f64().unwrap() > 0.0);
+    assert!(plan["rationale"].as_array().unwrap().len() > 0);
+    assert!(plan["controller_model_id"].is_string());
+  }
+}
+
+#[tokio::test]
+async fn test_plan_rejects_unknown_plant_kind() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let mut body = plan_req_body();
+  body["yards"][0]["zones"][0]["plant_kind"] =
+    serde_json::Value::String("cactus-garden".into());
+  let (status, _body) = json_post(&app, "/api/plan", body).await;
+  assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_plan_rejects_zero_zones() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let mut body = plan_req_body();
+  body["yards"][0]["zones"] = serde_json::Value::Array(Vec::new());
+  let (status, _body) = json_post(&app, "/api/plan", body).await;
+  assert_eq!(status, StatusCode::BAD_REQUEST);
 }

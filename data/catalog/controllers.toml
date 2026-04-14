@@ -11,6 +11,7 @@ manufacturer = "Example Manufacturer"
 price_usd = 105.00
 max_zones = 6
 valve_voltage_ac = 24.0
+is_smart = false
 notes = "Stand-in for an unbranded 6-zone controller."
 
 [opensprinkler-os-pi]
@@ -20,6 +21,7 @@ manufacturer = "OpenSprinkler"
 price_usd = 90.00
 max_zones = 24
 valve_voltage_ac = 24.0
+is_smart = false
 notes = "Open-source controller; mounts as a Raspberry Pi HAT.  Web UI on port 8080.  Local HTTP API."
 
 [rachio-3-8z]
@@ -29,6 +31,7 @@ manufacturer = "Rachio"
 price_usd = 230.00
 max_zones = 8
 valve_voltage_ac = 24.0
+is_smart = true
 notes = "Wi-Fi smart controller; weather-based scheduling; cloud + local API."
 
 [rachio-3-16z]
@@ -38,6 +41,7 @@ manufacturer = "Rachio"
 price_usd = 300.00
 max_zones = 16
 valve_voltage_ac = 24.0
+is_smart = true
 notes = "Same as Rachio 3 but with 16 zones for larger properties."
 
 [hunter-pro-c-12]
@@ -47,6 +51,7 @@ manufacturer = "Hunter Industries"
 price_usd = 200.00
 max_zones = 12
 valve_voltage_ac = 24.0
+is_smart = false
 notes = "Modular controller; expandable from 4 to 16 stations.  Indoor + outdoor cabinets."
 
 [orbit-b-hyve-12]
@@ -56,6 +61,7 @@ manufacturer = "Orbit"
 price_usd = 110.00
 max_zones = 12
 valve_voltage_ac = 24.0
+is_smart = true
 notes = "Wi-Fi + Bluetooth smart controller.  Indoor mount."
 
 [rain-bird-esp-me]
@@ -65,6 +71,7 @@ manufacturer = "Rain Bird"
 price_usd = 180.00
 max_zones = 22
 valve_voltage_ac = 24.0
+is_smart = true
 notes = "Modular base + 3-zone expansion modules; LNK Wi-Fi optional."
 
 [generic-24vac-6zone]
@@ -74,4 +81,5 @@ manufacturer = "Generic"
 price_usd = 60.00
 max_zones = 6
 valve_voltage_ac = 24.0
+is_smart = false
 notes = "Catch-all for unbranded controllers a user already owns."
