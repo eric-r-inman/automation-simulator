@@ -3,6 +3,30 @@
 
 * Upcoming
 
+- Build the Elm dashboard (Phase 8).  Refactors =frontend/src/Main.elm=
+  into a route dispatcher plus per-page modules:
+  - =Page/Dashboard.elm= owns the dashboard model + update;
+    fetches =/api/sim/property=, =/api/sim/state=, =/api/zones= on
+    init; re-fetches state after every step / reset / run / stop.
+  - =Api.elm= centralises every endpoint into one =Cmd= per call
+    plus typed records and =mapN= decoders against the Phase 7a
+    JSON schemas.
+  - =Widget/YardMap.elm= renders an SVG yard layout (one column
+    per yard, one tile per zone) with moisture-tracked fill colors
+    and a contrasting stroke when a valve is open.
+  - =Widget/ZoneCard.elm= shows per-zone moisture / valve / runtime
+    plus Run 5 min / Run 15 min / Stop buttons.
+  - =Widget/Weather.elm= shows temp + humidity + wind + solar +
+    rain in one compact grid; flashes a "raining" badge on
+    measurable precipitation.
+  - =Widget/SimControls.elm= exposes Step (+1 hour / +6 hours /
+    +1 day / +1 week) and Reset.
+  Adds the =elm/svg 1.0.1= package + regenerates =elm-srcs.nix=
+  / =registry.dat= for the Nix-tracked elm dependency set.
+  Replaces the placeholder =public/style.css= with a hand-written
+  earthy palette (deep moss-green for healthy moisture, russet
+  for stress, warm stone for surfaces) plus a responsive grid that
+  collapses to one column under 720 px.
 - Wire the simulator into the Axum server.  =web_base::AppState=
   now also owns =SharedWorld=, =Arc<dyn Controller>=,
   =Arc<dyn SensorSource>=, =Arc<Catalog>=, and =Arc<PropertyBundle>=,
