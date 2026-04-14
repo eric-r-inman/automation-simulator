@@ -1,5 +1,5 @@
 #+title:     automation-simulator — Project Plan
-#+author:    Eric Rinman
+#+author:    Eric Inman
 #+language:  en
 #+startup:   overview
 
