@@ -1,0 +1,96 @@
+#+title:     automation-simulator
+#+language:  en
+
+* Introduction
+
+~automation-simulator~ is a workbench for modeling food forest automation —
+irrigation schedules, sensor feedback loops, and the interaction between
+passive elements (swales, guilds, canopy) and active ones (pumps, valves,
+controllers).  It lets you describe a site, feed it synthetic or recorded
+inputs, and observe how a proposed control strategy behaves before you
+build it.
+
+The project ships two binaries on top of a shared library:
+
+- ~automation-simulator-cli~ — run simulations from the terminal against
+  a configuration file.
+- ~automation-simulator-server~ — expose the simulator over HTTP so a
+  frontend or external tooling can drive scenarios.
+
+* Installation
+
+** From source
+
+Prerequisites:
+
+- [[https://nixos.org/download.html][Nix]] with flakes enabled (recommended), or a recent Rust toolchain
+  managed manually.
+
+#+begin_src sh :exports code
+git clone https://github.com/ericrinman/automation-simulator
+cd automation-simulator
+nix develop --command cargo build --workspace --release
+#+end_src
+
+The resulting binaries land in ~target/release/~.
+
+** Via Nix
+
+#+begin_src sh :exports code
+nix run github:ericrinman/automation-simulator#cli -- --help
+nix run github:ericrinman/automation-simulator#server -- --help
+#+end_src
+
+** As a library
+
+Add the lib crate to your ~Cargo.toml~:
+
+#+begin_src toml :exports code
+[dependencies]
+automation-simulator-lib = "0.1"
+#+end_src
+
+* Usage
+
+** CLI
+
+Run a simulation described by a TOML scenario file:
+
+#+begin_src sh :exports code
+automation-simulator-cli --config ./scenarios/hugelkultur.toml
+#+end_src
+
+A minimal ~config.example.toml~ is included at the repo root as a
+starting point.
+
+** Server
+
+Start the HTTP server on the default port:
+
+#+begin_src sh :exports code
+automation-simulator-server --config ./config.toml
+#+end_src
+
+The server exposes a health check, Prometheus metrics, and an
+OpenAPI/Swagger schema endpoint.  See ~--help~ for the full set of
+flags.
+
+* Gotchas and Tradeoffs
+
+- *Simulation fidelity is deliberately coarse.*  The model aims to
+  surface gross behavior (does the system irrigate too much under a
+  heatwave?), not to reproduce fluid dynamics.
+- *No persistence by default.*  Scenarios run in-memory; snapshot or
+  export endpoints must be invoked explicitly.
+- *Time is simulated, not real.*  Schedules expressed in wall-clock
+  terms are interpreted against the scenario's simulated clock, which
+  may advance faster or slower than real time.
+
+* Contributing
+
+- Run the test suite: ~nix develop --command cargo test --workspace~.
+- Format before committing: ~treefmt~ (runs ~rustfmt~, ~alejandra~, and
+  ~prettier~ across the tree).
+- The pre-commit hook under ~.cargo-husky/~ enforces both.
+
+See [[file:CONTRIBUTING.org][CONTRIBUTING.org]] for details.

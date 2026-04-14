@@ -1,0 +1,921 @@
+*Food Forest Automation System*
+
+the example property (a residential lot in Portland, Oregon)
+
+/Full Setup Guide --- Hardware to Control Panel/
+
+Tech Stack: Rust workspace (Axum server + CLI + shared lib) • Elm
+frontend • Nix flake • treefmt • systemd • Tailscale • AGPL-3.0
+
+Hardware: OpenSprinkler • Ecowitt • Raspberry Pi 5
+
+*Section 1 --- System Overview*
+
+This document covers everything needed to go from an empty yard to a
+fully automated, remotely accessible food forest irrigation and
+management system. Sections are ordered sequentially --- hardware
+purchase, physical install, network setup, software environment, and
+finally the application itself.
+
+*How the System Works*
+
+The system manages 6 irrigation zones across front and back yards. Trees
+on the property are not irrigated --- they rely on Portland's abundant
+winter rainfall and deep soil reserves. The system focuses water where
+it is actually needed: raised veggie beds (2 zones) and shrubs with
+edible and ornamental perennials (4 zones).
+
+| *Layer*             | *Component*                                     | *Role*                                                                                              |
+|---------------------+-------------------------------------------------+-----------------------------------------------------------------------------------------------------|
+| 1 --- Physical      | Drip irrigation manifolds + tubing              | Delivers water to each of the 6 zones                                                               |
+| 2 --- Controller    | OpenSprinkler OS-Pi                             | Controls which valve opens, when, and for how long                                                  |
+| 3 --- Sensing       | Ecowitt GW2000 + 6 soil sensors + weather array | Measures soil moisture and local weather                                                            |
+| 4 --- Hub           | Raspberry Pi 5                                  | Runs OpenSprinkler, receives Ecowitt data, runs your Rust app server, runs Tailscale                |
+| 5 --- Control Panel | Elm app (compiled to JS) in browser             | Your interface, served as static assets by the Axum server --- viewable from anywhere via Tailscale |
+
+*Network Architecture*
+
+All devices live on the home WiFi network. The Raspberry Pi is the hub
+everything connects to. Tailscale creates an encrypted tunnel so you and
+the homeowner can access the control panel from anywhere without opening
+firewall ports.
+
+*Local network:* OpenSprinkler → Pi (USB/network) Ecowitt GW2000 → Pi
+(HTTP push) Pi runs Rust server on port 3000
+
+*Remote access:* Your laptop → Tailscale VPN → Pi → Rust server →
+control panel in browser
+
+*Portland Climate Context*
+
+Portland's Mediterranean climate means almost zero irrigation is needed
+October through May. The system earns its keep June through September
+--- a near-drought period where raised veggie beds require daily
+attention and perennial shrubs need regular supplemental water during
+establishment. Trees on the property are excluded from irrigation:
+Portland's winter rainfall is sufficient to maintain deep soil moisture
+through the dry season for established trees, and overwatering tree
+roots causes more harm than the summer dry period.
+
+*Section 2 --- Hardware Shopping List*
+
+Purchase everything below before starting installation. Links are to
+Amazon or manufacturer sites; prices are approximate as of early 2026.
+
+*2.1 --- Irrigation Controller*
+
+| *Item*              | *Model / Notes*                                                                                          | *Est. Cost* | *Source*          |
+|---------------------+----------------------------------------------------------------------------------------------------------+-------------+-------------------|
+| OpenSprinkler OS-Pi | The Pi HAT version that sits directly on the Raspberry Pi. Controls up to 24 zones. Handles all 6 zones. | ~$90        | opensprinkler.com |
+| 24VAC Power Adapter | Required to power the solenoid valves. 1A minimum. Often sold as a bundle with OS-Pi.                    | ~$15        | opensprinkler.com |
+
+#+begin_quote
+/⚠ Buy the OS-Pi version specifically, not the standalone OS. The OS-Pi
+is the HAT that mounts directly on the Raspberry Pi GPIO pins, saving
+cost and complexity./
+#+end_quote
+
+*2.2 --- Raspberry Pi*
+
+| *Item*               | *Model / Notes*                                                                                                                                                                                                                                                   | *Est. Cost* | *Source*                    |
+|----------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------------+-----------------------------|
+| Raspberry Pi 5 (4GB) | The OS-Pi HAT mounts directly on top of this.                                                                                                                                                                                                                     | ~$60        | raspberrypi.com or Adafruit |
+| MicroSD Card         | 16GB, Class 10 or better. Pi OS Lite, OpenSprinkler, Tailscale, and the Rust binary together use well under 4GB. 16GB leaves comfortable headroom for log files and SQLite database growth over time. Samsung Endurance Pro recommended for 24/7 write workloads. | ~$9         | Amazon                      |
+| Pi 5 Case            | Get one compatible with HATs --- open-top or tall lid. Argon NEO 5 is a solid choice.                                                                                                                                                                             | ~$15        | Amazon                      |
+| USB-C Power Supply   | Official Raspberry Pi 27W USB-C power supply. Do not cheap out here --- underpowered Pi causes instability.                                                                                                                                                       | ~$12        | raspberrypi.com or Amazon   |
+
+#+begin_quote
+/⚠ The OS-Pi HAT occupies the GPIO pins. Choose a case with HAT
+clearance. The Argon NEO 5 BRED edition works well for this./
+#+end_quote
+
+*2.3 --- Sensing: Ecowitt System*
+
+Ecowitt devices communicate over local WiFi via an HTTP push to the Pi.
+No cloud required. All sensors report to the GW2000 gateway, which
+forwards data to your Rust server.
+
+| *Item*                               | *Model / Notes*                                                                                                               | *Est. Cost*    | *Source*              |
+|--------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+----------------+-----------------------|
+| Ecowitt GW2000 Gateway               | The WiFi hub that all Ecowitt sensors report to. Supports up to 8 soil sensors. Configure to push data to your Pi's IP.       | ~$50           | ecowitt.com or Amazon |
+| Ecowitt WH51 Soil Moisture Sensor x6 | One per zone. Wireless, battery-powered (AA). Waterproof. 60-day battery life. Buy a 6-pack.                                  | ~$120 (6-pack) | ecowitt.com or Amazon |
+| Ecowitt WS90 Weather Station         | All-in-one: wind, rain, UV, solar, temp, humidity. No moving parts. Mounts on a pole. Feeds OpenSprinkler weather adjustment. | ~$120          | ecowitt.com or Amazon |
+
+#+begin_quote
+/✔ The GW2000 has a built-in web UI for configuration. You'll set it to
+push data to http://[Pi-IP]:3000/ecowitt every 60 seconds. Your Rust
+server receives and stores this./
+#+end_quote
+
+*2.4 --- Irrigation: Physical Components*
+
+These are the in-ground components. Two manifold assemblies (one per
+spigot) serve all 6 zones. Quantities below assume a 6,000 sq ft lot
+with ~5,000 sq ft of planted area.
+
+| *Item*                                                                           | *Model / Notes*                                                                                                                                                     | *Qty*        | *Est. Cost* | *Source*            |
+|----------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------+-------------+---------------------|
+| 3-Zone Solenoid Valve Manifold                                                   | Rain Bird HV300 or equivalent. 24VAC solenoids. Each manifold controls 3 zones. Buy 2.                                                                              | 2            | ~$80        | Home Depot / Amazon |
+| Backflow Preventer                                                               | Orbit 51023 or Rain Bird BF075DCA. One per spigot. Legally required in Oregon.                                                                                      | 2            | ~$30        | Home Depot          |
+| Pressure Regulator (25 PSI)                                                      | Drip irrigation runs at low pressure. Reduces typical house pressure (60-80 PSI) to 25 PSI. One per spigot.                                                         | 2            | ~$20        | Home Depot          |
+| Y-Filter / Mesh Filter                                                           | Prevents debris from clogging emitters. Install between pressure regulator and manifold.                                                                            | 2            | ~$16        | Amazon              |
+| 3/4" to 1/2" Hose Thread Adapter                                                 | Connects spigot to your backflow preventer stack.                                                                                                                   | 2            | ~$8         | Home Depot          |
+| 1/2" Poly Main Supply Tubing (200 ft)                                            | The backbone tubing that runs from each manifold out to zone sub-lines.                                                                                             | 1 roll       | ~$30        | Amazon              |
+| 1/4" Drip Line Tubing (500 ft)                                                   | Branch lines that run to individual plants.                                                                                                                         | 2 rolls      | ~$40        | Amazon              |
+| Drip Emitters --- 1.0 GPH, pressure-compensating (shrubs/perennials)             | For Zones 2, 3, 5, 6. Pressure-compensating ensures even flow across long runs. Buy extra.                                                                          | 100 pack     | ~$25        | Amazon              |
+| Inline Drip Line --- 1/2" with pre-installed emitters, 12" spacing (veggie beds) | For Zones 1 and 4 (raised veggie beds). Pre-installed emitters every 12 inches make dense bed coverage easy. Easier than individual emitters for a grid bed layout. | 100 ft       | ~$30        | Amazon              |
+| Micro-Spray Heads (90/180 degree, adjustable)                                    | Optional supplement for veggie bed zones where coverage gaps exist.                                                                                                 | 10 pack      | ~$12        | Amazon              |
+| Hole Punch Tool                                                                  | For punching 1/4" holes in 1/2" main tubing to insert barbed fittings.                                                                                              | 1            | ~$8         | Amazon              |
+| Barbed Fittings Kit                                                              | Tees, elbows, couplers, end caps for 1/2" and 1/4" tubing.                                                                                                          | assorted kit | ~$20        | Amazon              |
+| Tubing Stakes / Hold-Downs                                                       | Keeps 1/4" drip lines on the ground surface. 100-pack.                                                                                                              | 100 pack     | ~$10        | Amazon              |
+| Teflon Tape                                                                      | For all threaded connections.                                                                                                                                       | 2 rolls      | ~$4         | Home Depot          |
+
+*2.5 --- Networking*
+
+| *Item*               | *Model / Notes*                                                                 | *Est. Cost* | *Source* |
+|----------------------+---------------------------------------------------------------------------------+-------------+----------|
+| Short Ethernet Cable | Pi connects to router via ethernet for reliability. 6 ft is usually sufficient. | ~$8         | Amazon   |
+
+#+begin_quote
+/✔ Ethernet is strongly preferred over WiFi for the Pi. It eliminates
+one variable if things go wrong./
+#+end_quote
+
+*2.6 --- Total Hardware Cost Summary*
+
+| *Category*                                                     | *Estimated Cost* |
+|----------------------------------------------------------------+------------------|
+| Raspberry Pi 5 + accessories                                   | ~$99             |
+| OpenSprinkler OS-Pi + power adapter                            | ~$105            |
+| Ecowitt sensing system (gateway + 6 sensors + weather station) | ~$290            |
+| Irrigation physical components                                 | ~$325            |
+| Networking                                                     | ~$8              |
+| TOTAL                                                          | ~$822            |
+
+#+begin_quote
+/⚠ Add 10-15% for tax and shipping. Budget approximately $950 all-in./
+#+end_quote
+
+*Section 3 --- Physical Installation*
+
+This section covers the physical irrigation installation. No electrical
+work is required --- the solenoid valves run on 24VAC from the
+OpenSprinkler, which itself runs on a low-voltage adapter.
+
+*3.1 --- Zone Planning*
+
+You have 6 zones total across two spigots. Here is the recommended zone
+assignment based on plant type, since trees, shrubs, and vegetables have
+fundamentally different watering needs:
+
+Note: trees throughout the property are not irrigated. Established food
+forest trees in Portland's climate are self-sufficient once their root
+systems develop, relying on winter rainfall and deep soil moisture.
+Irrigation resources are focused entirely on the zones that need it
+most.
+
+| *Zone* | *Yard* | *Plant Type*                                     | *Emitter Type*                     | *Typical Schedule*                                |
+|--------+--------+--------------------------------------------------+------------------------------------+---------------------------------------------------|
+| Zone 1 | Front  | Raised veggie beds (annuals)                     | Micro-spray or 1.0 GPH inline drip | Daily in peak summer --- these dry out fastest    |
+| Zone 2 | Front  | Shrubs, edible perennials, ornamental perennials | 1.0 GPH pressure-compensating drip | Moderate --- 2-3x/week in summer once established |
+| Zone 3 | Front  | Shrubs, edible perennials, ornamental perennials | 1.0 GPH pressure-compensating drip | Moderate --- 2-3x/week in summer once established |
+| Zone 4 | Back   | Raised veggie beds (annuals)                     | Micro-spray or 1.0 GPH inline drip | Daily in peak summer --- these dry out fastest    |
+| Zone 5 | Back   | Shrubs, edible perennials, ornamental perennials | 1.0 GPH pressure-compensating drip | Moderate --- 2-3x/week in summer once established |
+| Zone 6 | Back   | Shrubs, edible perennials, ornamental perennials | 1.0 GPH pressure-compensating drip | Moderate --- 2-3x/week in summer once established |
+
+#+begin_quote
+/✔ Perennials need more water in their first season than in subsequent
+years. Plan to dial back Zone 2, 3, 5, and 6 schedules after year one as
+root systems establish./
+#+end_quote
+
+*3.2 --- Spigot Assembly (per spigot, repeat twice)*
+
+At each spigot, you will build a short stack of components before the
+water reaches the manifold. Order matters --- install in this sequence,
+spigot outward:
+
+1. Wrap all threaded male fittings with 2-3 wraps of Teflon tape before
+   connecting.
+
+2. Attach the 3/4" to 1/2" hose thread adapter directly to the spigot.
+
+3. Attach the backflow preventer to the adapter. Arrow on the backflow
+   preventer must point away from the spigot (toward the yard).
+
+4. Attach the 25 PSI pressure regulator to the backflow preventer
+   output.
+
+5. Attach the Y-filter/mesh filter after the pressure regulator.
+
+6. Attach the 3-zone solenoid manifold to the filter output.
+
+7. Run 1/2" poly main tubing from each of the 3 manifold outputs toward
+   the corresponding zone areas. Secure to the ground or fence with
+   stakes.
+
+#+begin_quote
+/⚠ Hand-tighten all hose fittings plus 1/4 turn with pliers.
+Over-tightening cracks plastic fittings./
+#+end_quote
+
+*3.3 --- Running Drip Lines*
+
+*For Shrub and Perennial Zones (Zones 2, 3, 5, 6)*
+
+8. [@8] Use the hole punch tool to punch a hole in the 1/2" main line
+   wherever a 1/4" branch line needs to split off.
+
+9. Press a barbed 1/4" fitting into the hole. Run 1/4" drip tubing from
+   this fitting to each plant.
+
+10. At the end of each 1/4" line, press in a 1.0 GPH
+    pressure-compensating emitter.
+
+11. Position emitters 4-6" from the base of each plant, not directly
+    against the stem. For shrubs, one emitter per plant is sufficient in
+    year one; add a second on opposite sides in year two as plants
+    expand.
+
+#+begin_quote
+/✔ Perennials in their first year need more frequent watering than the
+same plants in year two. Plan to revise zone schedules annually as the
+planting matures./
+#+end_quote
+
+*For Raised Veggie Bed Zones (Zones 1 and 4)*
+
+12. [@12] Run the 1/2" main supply line to the edge of each raised bed.
+
+13. Branch off 1/2" inline drip line (pre-installed emitters every 12")
+    across the width of each bed in parallel rows, spaced 12" apart.
+    This creates a grid pattern that covers the entire bed surface.
+
+14. Cap the end of each row. Cap the main line end.
+
+15. Optionally add a micro-spray head in the center of smaller beds if
+    the inline drip grid does not provide full coverage.
+
+*3.4 --- Connecting Solenoid Valve Wires to OpenSprinkler*
+
+Each solenoid valve on the manifold has two wires --- one common
+(typically white) and one zone wire (any other color). The OpenSprinkler
+OS-Pi has screw terminals for each zone plus a common terminal.
+
+16. [@16] Run the two wires from each solenoid valve back to the Pi
+    location. For front yard, use outdoor-rated wire (Rain Bird direct
+    burial wire, 18-gauge, 5-conductor for 3 zones + 2 commons).
+
+17. Connect all common (white) wires together and connect them to the
+    COM terminal on the OpenSprinkler.
+
+18. Connect each zone wire to terminals 1-6 on the OpenSprinkler, noting
+    which terminal corresponds to which zone.
+
+#+begin_quote
+/⚠ Label every wire at both ends before connecting. A label maker or
+masking tape with a marker works fine./
+#+end_quote
+
+*Section 4 --- Raspberry Pi Setup*
+
+The Pi runs the entire software stack: OpenSprinkler firmware, your Rust
+server, and Tailscale. Do all of this setup before mounting the OS-Pi
+HAT.
+
+*4.1 --- Install Raspberry Pi OS*
+
+19. [@19] Download Raspberry Pi Imager on your Mac:
+    https://www.raspberrypi.com/software/
+
+20. Insert the microSD card into your Mac using a card reader.
+
+21. Open Raspberry Pi Imager. Choose device: Raspberry Pi 5. Choose OS:
+    Raspberry Pi OS Lite (64-bit) --- no desktop needed.
+
+22. Before writing, click the gear icon (advanced options). Set hostname
+    to foodforest.local, enable SSH with password authentication, set a
+    username and strong password, and configure your WiFi credentials as
+    a fallback (even though you'll use ethernet).
+
+23. Write the image to the SD card. Eject and insert into the Pi.
+
+24. Connect the Pi to your router with an ethernet cable. Power it on
+    with the USB-C supply.
+
+25. From your Mac terminal, connect: ssh [username]@foodforest.local
+
+*4.2 --- Assign a Static Local IP*
+
+Log into your home router admin page (usually 192.168.1.1 or
+192.168.0.1) and find the DHCP reservation section. Assign the Pi's MAC
+address a permanent IP --- something like 192.168.1.100. This ensures
+the Pi always gets the same address, which is important since the
+Ecowitt gateway pushes data to a specific IP.
+
+*4.3 --- Install OpenSprinkler Software*
+
+Because you are using the OS-Pi HAT, you run the OpenSprinkler software
+directly on the Pi rather than a separate device.
+
+26. [@26] SSH into the Pi.
+
+27. Run the OpenSprinkler install script:
+
+#+begin_quote
+curl -s https://opensprinkler.com/scripts/install.sh | sudo bash
+#+end_quote
+
+28. [@28] After install, reboot: sudo reboot
+
+29. From your Mac browser, open http://192.168.1.100:8080. You should
+    see the OpenSprinkler web UI. Default password: opendoor
+
+30. In OpenSprinkler settings, configure: number of zones (6), station
+    names (Zone 1 Front Trees, etc.), and enable Weather Control. Under
+    Weather Service, choose 'local' and point it to
+    http://localhost:3000/weather --- this is where your Rust server
+    will serve Ecowitt data in the format OpenSprinkler expects.
+
+#+begin_quote
+/✔ The OpenSprinkler API documentation is at:
+https://openthings.freshdesk.com/support/solutions/articles/5000716363.
+Your Rust server will use this API to open/close zones
+programmatically./
+#+end_quote
+
+*4.4 --- Install Tailscale (Remote Access)*
+
+Tailscale creates a private encrypted network between your Mac and the
+Pi. Once installed, you access the Pi and your control panel using a
+Tailscale IP from anywhere in the world.
+
+31. [@31] Create a free Tailscale account at https://tailscale.com. The
+    free tier supports 3 devices, which is enough.
+
+32. On the Pi, install Tailscale:
+
+#+begin_quote
+curl -fsSL https://tailscale.com/install.sh | sh
+#+end_quote
+
+33. [@33] Authenticate the Pi to your Tailscale account: sudo tailscale
+    up
+
+34. Install Tailscale on your Mac from https://tailscale.com/download.
+    Log in with the same account.
+
+35. In the Tailscale admin console, find the Pi's Tailscale IP (looks
+    like 100.x.x.x). You will use this IP to access your control panel
+    remotely.
+
+36. Test: from your Mac browser (with Tailscale running), open
+    http://100.x.x.x:3000 --- this is where your Rust server will live.
+
+#+begin_quote
+/✔ To share access with the homeowner, invite her email address in the
+Tailscale admin console as a user. She installs Tailscale on her phone
+or laptop and can access the control panel from anywhere./
+#+end_quote
+
+*4.5 --- Mount the OS-Pi HAT*
+
+Once the Pi software is configured and tested over SSH, power the Pi
+down and mount the OS-Pi HAT:
+
+37. [@37] Power off the Pi: sudo shutdown -h now
+
+38. Align the OS-Pi HAT's 40-pin GPIO header with the Pi's GPIO pins.
+    Press down gently but firmly until seated.
+
+39. Connect the 24VAC power adapter to the OS-Pi's power terminals
+    (labeled VAC on the board).
+
+40. Connect your solenoid valve wires to the zone terminals.
+
+41. Power the Pi back on. Test each zone from the OpenSprinkler web UI
+    --- you should hear the solenoid valves click and water flow.
+
+*Section 5 --- Ecowitt Sensor Setup*
+
+*5.1 --- GW2000 Gateway*
+
+42. [@42] Power on the GW2000 and connect it to your WiFi using the
+    Ecowitt mobile app (WS View Plus, free).
+
+43. In the Ecowitt app or GW2000 web UI, navigate to: Weather Services →
+    Customized. Enable it.
+
+44. Set the push path to: http://192.168.1.100:3000/ecowitt (your Pi's
+    static IP). Set the upload interval to 60 seconds.
+
+45. The GW2000 will now POST sensor data as form-encoded key-value pairs
+    every 60 seconds. Your Rust server receives and stores this.
+
+*5.2 --- WH51 Soil Sensors*
+
+46. [@46] Insert 2x AA batteries into each WH51 sensor.
+
+47. Each sensor auto-pairs with the GW2000 when powered on within range.
+    Confirm in the GW2000 app that all 6 sensors appear.
+
+48. Insert sensors into the soil in the center of each zone,
+    approximately 4 inches deep. Label each with waterproof tape noting
+    the zone number.
+
+49. In the GW2000 app, rename each sensor to match its zone (e.g.,
+    Zone1-FrontTrees). This name will appear in the data your Rust
+    server receives.
+
+*5.3 --- WS90 Weather Station*
+
+50. [@50] Mount the WS90 on a pole in the most open part of the yard ---
+    away from trees, walls, and structures. Manufacturer recommends
+    minimum 2 meters high.
+
+51. The WS90 is solar/battery powered. It auto-pairs with the GW2000.
+    Confirm it appears in the app.
+
+*Section 6 --- Development Environment (Nix flake, Rust workspace)*
+
+This section sets up your Mac as the development machine. You will write
+and test the app on your Mac, then deploy it to the Pi.
+
+*6.1 --- Install Nix*
+
+52. [@52] Install Nix using the Determinate Systems installer --- it
+    handles macOS quirks and SIP automatically:
+
+#+begin_quote
+curl --proto '=https' --tlsv1.2 -sSf -L
+https://install.determinate.systems/nix | sh -s -- install
+#+end_quote
+
+53. [@53] Close and reopen your terminal. Verify with: nix --version
+
+*6.2 --- Project flake.nix*
+
+This project uses the flake.nix emitted by the rust-template repo at
+/dev/rust-template. When you run nix develop, Nix drops you into a shell
+with the pinned Rust toolchain (rustc, cargo, rust-analyzer, rustfmt,
+rust-src), the Elm toolchain (elm, elm-format, elm2nix), treefmt
+(rustfmt + alejandra + prettier), just, jq, cargo-sweep, pkg-config,
+openssl, and changelog-roller --- no global installs needed. No separate
+WASM toolchain is required because the frontend is Elm, not Rust/WASM.
+
+The flake.nix that ships in the template is already wired for this
+project --- do not replace it. The snippet below is superseded context
+only; the authoritative file is
+/Users/ericrinman/dev/foodforest/flake.nix, which already provides a dev
+shell with the pinned Rust toolchain, the Elm toolchain, treefmt, just,
+jq, changelog-roller, and the Crane-based package outputs for `nix build
+.#server` and `nix build .#cli`.
+
+#+begin_quote
+{
+
+description = "Food Forest Control Panel";
+
+inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+inputs.rust-overlay.url = "github:oxalica/rust-overlay";
+
+outputs = { nixpkgs, rust-overlay, ... }: {
+
+devShells.aarch64-darwin.default = let
+
+pkgs = import nixpkgs { system = "aarch64-darwin";
+
+overlays = [ rust-overlay.overlays.default ]; };
+
+rust = pkgs.rust-bin.stable.latest.default.override {
+
+targets = [ "wasm32-unknown-unknown" ]; };
+
+in pkgs.mkShell {
+
+buildInputs = [ rust pkgs.trunk pkgs.cargo-leptos
+
+pkgs.openssl pkgs.pkg-config pkgs.binaryen ]; };
+
+};
+
+}
+
+/✔ The template's flake.nix exposes devShells for every system via
+nixpkgs.lib.systems.flakeExposed; Apple Silicon, Intel, and Linux all
+work without edits./
+#+end_quote
+
+*6.3 --- Enter the Dev Shell*
+
+54. [@54] Change into the project directory: cd
+    /Users/ericrinman/dev/foodforest
+
+55. Run: nix develop (the template's flake.nix is already present)
+
+56. Nix will download and build all dependencies. Subsequent nix develop
+    invocations are fast (cached). You now have rustc, cargo, elm,
+    elm-format, treefmt, just, and every other dev tool declared in
+    flake.nix available on PATH.
+
+*Section 7 --- Application Architecture*
+
+*7.1 --- Technology Choices*
+
+| *Layer*             | *Technology*                      | *Why*                                                                                                                                                                                                                                                                                                                                      |
+|---------------------+-----------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Backend server      | Rust + Axum                       | Fast async HTTP server in the `server` crate. Serves base infrastructure (healthz, Prometheus metrics, /scalar OpenAPI UI, /me OIDC session info) and the application routes (simulation API, Ecowitt ingest, OpenSprinkler proxy). Serves the compiled Elm bundle as static assets from frontend/public.                                  |
+| Frontend UI         | Elm                               | Pure functional UI language with a strict type system and the Elm architecture. Compiles to a single JS bundle served from frontend/public by the Axum server. Dependencies pinned via elm2nix.                                                                                                                                            |
+| Build tool          | just + cargo + elm make           | justfile drives the build: `just build` compiles Elm to frontend/public/elm.js and runs `cargo build --workspace` for every Rust crate. `just test` adds `cargo test --workspace`.                                                                                                                                                         |
+| Data storage        | SQLite via sqlx                   | Lightweight, file-based. Stores sensor history (real and simulated), plant inventory, watering logs, simulated property/zone state. Added to crates/lib as an additional workspace dependency.                                                                                                                                             |
+| Deployment          | Rust binary on Pi                 | Cross-compile on Mac or build via `nix build .#server`; deploy via the nix/modules/nixos-server.nix or nix/modules/darwin-server.nix module the template emits. The server crate is already wired for systemd socket activation, sd-notify readiness, and the watchdog.                                                                    |
+| Remote access       | Tailscale                         | Zero-config VPN. Pi gets a stable 100.x.x.x address reachable from anywhere. Also used to share the running simulator with the homeowner before any physical install.                                                                                                                                                                      |
+| Base infrastructure | rust-template/foodforest scaffold | Provides structured logging (tracing + journald), staged configuration (CliRaw → ConfigFileRaw → Config), semantic errors via thiserror, systemd socket activation + watchdog, OIDC session middleware, OpenAPI/Scalar docs, Prometheus metrics, pre-commit hooks via .cargo-husky, and treefmt formatting. All new code plugs into these. |
+
+*7.2 --- Project Structure*
+
+The workspace layout emitted by the rust-template is:
+
+#+begin_quote
+flake.nix # Nix dev environment
+
+Cargo.toml # Workspace manifest
+
+flake.nix # Nix dev shell, packages, NixOS/Darwin modules
+
+Cargo.toml # Workspace manifest (cli, lib, server)
+
+justfile # Orchestrates Elm + cargo builds
+
+treefmt.toml # Unified formatter config
+
+config.example.toml # Example server config
+
+crates/
+
+lib/ # Shared types, logging, simulation engine
+
+src/lib.rs
+
+src/logging.rs
+
+src/sim/ # (new) simulation primitives: property, zones, hardware
+
+cli/ # Headless CLI entrypoint
+
+src/main.rs # Orchestrator; delegates to modules
+
+src/config.rs # CliRaw → Config
+
+src/logging.rs
+
+server/ # Axum long-running service
+
+src/main.rs # Orchestrator + create_app
+
+src/lib.rs
+
+src/config.rs # CliRaw → ConfigFileRaw → Config
+
+src/web_base.rs # /healthz, /metrics, /me, /scalar, static assets
+
+src/auth.rs # OIDC login/callback/logout
+
+src/systemd.rs # sd-notify, watchdog
+
+src/sim_api.rs # (new) /api/sim/* routes
+
+src/ingest.rs # (new) /ecowitt, /weather routes
+
+src/zones.rs # (new) OpenSprinkler proxy or simulated driver
+
+frontend/ # Elm SPA
+
+elm.json # Elm deps
+
+elm-srcs.nix # elm2nix pin
+
+src/Main.elm # Entry module
+
+src/... # Feature modules (YardMap, ZoneCard, SensorPanel,
+PlantInventory)
+
+public/index.html # Shell
+
+public/style.css # Hand-written CSS (no Tailwind)
+
+public/elm.js # Produced by elm make
+
+nix/
+
+modules/nixos-server.nix # NixOS systemd module
+
+modules/darwin-server.nix # nix-darwin launchd module
+
+packages/server.nix # Crane build override
+
+.cargo-husky/hooks/ # Pre-commit hook: treefmt + cargo test
+
+.github/workflows/ # Test, format, publish (lib), dependabot
+#+end_quote
+
+*7.3 --- Key API Routes*
+
+The server crate exposes both hardware-facing routes and
+simulation-facing routes. The Elm frontend calls them directly over
+fetch. In the first iteration every hardware route is answered by the
+simulated driver; switching to real hardware is a runtime config flag,
+not a code change.
+
+| *Method* | *Route*              | *Description*                                                                           |
+|----------+----------------------+-----------------------------------------------------------------------------------------|
+| GET      | /api/zones           | Returns all zone statuses from OpenSprinkler                                            |
+| POST     | /api/zones/{id}/run  | Triggers a zone to run for N minutes                                                    |
+| POST     | /api/zones/{id}/stop | Stops a running zone                                                                    |
+| GET      | /api/sensors         | Returns latest soil moisture readings for all 6 zones                                   |
+| POST     | /ecowitt             | Receives sensor push data from the Ecowitt GW2000                                       |
+| GET      | /weather             | Serves local weather data to OpenSprinkler in its expected format                       |
+| GET      | /api/plants          | Returns plant inventory (all zones)                                                     |
+| POST     | /api/plants          | Adds a plant to the inventory                                                           |
+| GET      | /api/schedule        | Returns upcoming watering schedule from OpenSprinkler                                   |
+| GET      | /api/history         | Returns watering run history from SQLite                                                |
+| GET      | /api/sim/property    | Returns the simulated property layout (dimensions, beds, zones, plants)                 |
+| POST     | /api/sim/step        | Advances simulated time by N minutes (deterministic)                                    |
+| POST     | /api/sim/reset       | Resets the simulation to the initial property state                                     |
+| GET      | /api/sim/state       | Returns current soil moisture, reservoir, pump, and valve state of the simulated system |
+
+*7.4 --- Deployment to the Pi*
+
+Because the Pi runs a different CPU architecture (ARM64) than your Mac,
+you can either cross-compile the Rust binary on your Mac and copy it to
+the Pi, or build directly on the Pi from a clone of the repo. `just
+build` produces both frontend/public/elm.js and the workspace binaries;
+`nix build .#server` produces a hermetic package.
+
+57. [@57] Option A --- cross-compile from Mac. Add the ARM64 Linux
+    target to your Rust toolchain (inside nix develop):
+
+#+begin_quote
+rustup target add aarch64-unknown-linux-gnu
+#+end_quote
+
+58. [@58] Build for the Pi:
+
+#+begin_quote
+just build # or: cargo build --release --workspace && cd frontend && elm
+make src/Main.elm --output public/elm.js --optimize
+#+end_quote
+
+59. [@59] Copy the binary and the static WASM bundle to the Pi:
+
+#+begin_quote
+scp target/aarch64-unknown-linux-gnu/release/automation-simulator-server
+pi@192.168.1.100:~/
+
+scp -r frontend/public pi@192.168.1.100:~/frontend-public
+#+end_quote
+
+60. [@60] Option B (recommended) --- use the NixOS module at
+    nix/modules/nixos-server.nix. It declares the systemd unit, socket
+    activation, watchdog, and OIDC credential loading for you. If you
+    are not running NixOS on the Pi, the systemd unit below is
+    equivalent:
+
+#+begin_quote
+[Unit]
+
+Description=automation-simulator (food forest control panel)
+
+After=network.target
+
+[Service]
+
+ExecStart=/home/pi/automation-simulator-server --frontend-path
+/home/pi/frontend-public --base-url http://foodforest.local:3000
+
+WorkingDirectory=/home/pi
+
+Restart=always
+
+Environment=LOG_FORMAT=json
+
+[Install]
+
+WantedBy=multi-user.target
+#+end_quote
+
+61. [@61] Enable and start the service: sudo systemctl enable
+    automation-simulator-server && sudo systemctl start
+    automation-simulator-server
+
+*Section 8 --- Claude Prompt for the Control Panel*
+
+When you have your project template ready, provide Claude with the
+following prompt to build the control panel. Fill in the bracketed
+sections with specifics from your template as needed.
+
+#+begin_quote
+/⚠ This prompt assumes Claude will see your existing project
+template/scaffold in context. Adjust the prompt to match whatever
+template structure you use./
+#+end_quote
+
+*The Prompt*
+
+#+begin_quote
+/You are building a simulation engine plus control panel called
+automation-simulator, inside the rust-template workspace at
+/Users/ericrinman/dev/foodforest. The first iteration simulates the
+hardware --- do not assume any physical device is reachable. The tech
+stack is:/
+
+/- Backend: Rust workspace with three crates (crates/lib, crates/cli,
+crates/server). The server uses Axum, tokio-listener (systemd socket
+activation), thiserror for semantic errors, tracing + tracing-journald
+for logs, aide + schemars for OpenAPI, tower-sessions + openidconnect
+for optional OIDC, and prometheus for metrics./
+
+/- Frontend: Elm SPA in frontend/src/Main.elm, compiled to
+frontend/public/elm.js via `elm make`. The Axum server serves
+frontend/public as static assets with a SPA fallback to index.html./
+
+/- Database: SQLite via the sqlx crate (to be added to
+[workspace.dependencies]), file-based, located at
+./automation-simulator.db by default./
+
+/- Build: `just build` (Elm + cargo), `just test` (Elm compile + cargo
+test --workspace). All commands run inside `nix develop`. Pre-commit
+hook (.cargo-husky/hooks) enforces treefmt and cargo test./
+
+/- Deployment target for the real system: Raspberry Pi 5 (ARM64) via the
+nix/modules/nixos-server.nix module. For the simulator, the target is
+the developer's Mac --- `nix develop --command just run -- --config
+config.toml` runs both the backend and serves the frontend locally./
+
+/The app controls an automated food forest irrigation system at a
+residential property in Portland, Oregon. The system has:/
+
+/- 6 irrigation zones: Zone 1 (front raised veggie beds), Zone 2 (front
+shrubs/edible perennials/ornamental perennials), Zone 3 (front
+shrubs/edible perennials/ornamental perennials), Zone 4 (back raised
+veggie beds), Zone 5 (back shrubs/edible perennials/ornamental
+perennials), Zone 6 (back shrubs/edible perennials/ornamental
+perennials). Trees on the property are not irrigated./
+
+/- An OpenSprinkler OS-Pi controller reachable at http://localhost:8080
+with API password 'opendoor'/
+
+/- 6 Ecowitt WH51 soil moisture sensors (one per zone), plus an Ecowitt
+WS90 weather station, all pushing data via HTTP POST to /ecowitt every
+60 seconds/
+
+/Build the following features, one file at a time. Comments must follow
+CLAUDE.md: full sentences at 80 columns, non-obvious intent only, no
+restatement of control flow. Errors must be semantic thiserror variants,
+not anyhow-wrapped. Each feature lands as its own module under the
+appropriate crate; main.rs stays an orchestrator./
+
+/1. SQLite schema (crates/lib/src/db/schema.sql and sqlx migrations):
+tables for property, zones, plants, sensor_readings, watering_log,
+sim_runs, sim_events. Schema lives in the lib crate so both server and
+cli can open the same database./
+
+/2. Axum backend: add per-feature modules under crates/server/src/
+(sim_api.rs, ingest.rs, zones.rs, plants.rs) and register them in
+create_app. The OpenSprinkler proxy and Ecowitt ingestion are behind a
+runtime `hardware_mode` flag (`simulated` │ `real`)./
+
+/3. Elm frontend (frontend/src/): split Main.elm into feature modules
+--- YardMap.elm (schematic SVG with color-coded moisture overlays),
+ZoneCard.elm (per-zone moisture, last watered, next schedule, manual
+run/stop), Weather.elm (temp, humidity, wind, rain), PlantInventory.elm
+(add/edit/delete per zone), SimControls.elm (step, reset, scenario
+picker). Follow the existing Main.elm pattern: one Msg type, one update,
+pure functions, no ports./
+
+/4. All styling via pure CSS in frontend/public/style.css --- no CSS
+frameworks, no Tailwind, no hand-written JavaScript beyond what elm make
+produces. Use a natural, earthy palette (greens and browns) appropriate
+for a garden management tool./
+#+end_quote
+
+*Notes on Using This Prompt*
+
+- Provide your project template to Claude before or alongside this
+  prompt so it can follow your existing code conventions.
+
+- Ask Claude to build one module at a time (schema, then backend routes,
+  then each frontend component). Do not ask for everything at once.
+
+- When iterating on UI, describe what you see and what you want to
+  change. Claude will revise the specific Elm module.
+
+- For the OpenSprinkler API, the full documentation is at:
+  https://openthings.freshdesk.com/support/solutions/articles/5000716363.
+  Provide this URL to Claude if it needs to look up specific API calls.
+
+*Section 9 --- Complete Setup Checklist*
+
+Use this as a sequential checklist. Do not skip steps --- each section
+depends on the previous.
+
+*Hardware*
+
+- All hardware purchased (see Section 2 shopping list)
+
+- Raspberry Pi 5 assembled with case and SD card
+
+- OpenSprinkler OS-Pi HAT on hand (not yet mounted)
+
+- Ecowitt GW2000, 6x WH51 sensors, WS90 weather station on hand
+
+- All irrigation physical components on hand
+
+*Physical Installation*
+
+- Front yard spigot stack assembled (backflow, pressure reg, filter,
+  manifold)
+
+- Back yard spigot stack assembled
+
+- Front yard drip lines run to all plants, zones 1-3
+
+- Back yard drip lines run to all plants, zones 4-6
+
+- All solenoid valve wires run back to Pi location and labeled
+
+- Manual flow test passed on all 6 zones
+
+*Raspberry Pi + Software*
+
+- Raspberry Pi OS Lite written to SD card and booted
+
+- Static IP assigned at router (e.g., 192.168.1.100)
+
+- SSH access confirmed from Mac
+
+- OpenSprinkler software installed and web UI accessible
+
+- All 6 zones configured and named in OpenSprinkler
+
+- Tailscale installed on Pi and authenticated
+
+- Tailscale installed on Mac (and homeowner devices)
+
+- OS-Pi HAT mounted and solenoid wires connected
+
+- Zone test from OpenSprinkler web UI passed
+
+*Ecowitt*
+
+- GW2000 connected to home WiFi via WS View Plus app
+
+- All 6 WH51 soil sensors paired and visible in app
+
+- WS90 weather station mounted and paired
+
+- GW2000 configured to push data to http://192.168.1.100:3000/ecowitt
+  every 60 seconds
+
+*Application*
+
+- Nix installed on Mac (Determinate Systems installer)
+
+- flake.nix created and nix develop shell working
+
+- rust-template applied via new-project.sh (already done)
+
+- Claude prompt used to build backend, database, and frontend components
+
+- App tested locally on Mac (just run -- --config config.toml)
+
+- App cross-compiled for Pi ARM64
+
+- Binary and static files deployed to Pi
+
+- systemd service created and enabled on Pi
+
+- Control panel accessible via Tailscale from Mac and homeowner device
+
+- Ecowitt data flowing to /ecowitt endpoint confirmed
+
+- OpenSprinkler zone control confirmed through app
+
+*Final Validation*
+
+- Run all 6 zones from the control panel and confirm water flows
+
+- Confirm soil moisture readings update in the UI after watering
+
+- Confirm weather station readings appear in weather panel
+
+- Set a watering schedule in OpenSprinkler and confirm it appears in the
+  app
+
+- Access the control panel remotely over Tailscale from a different
+  network
+
+- Walk the homeowner through the control panel
+
+/--- End of Document ---/
