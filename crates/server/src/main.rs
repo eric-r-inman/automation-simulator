@@ -24,7 +24,7 @@
 mod logging;
 mod systemd;
 
-use automation_simulator_server::{auth, config, web_base};
+use automation_simulator_server::{auth, config, routes, web_base};
 
 use axum::{routing::get, serve, Router};
 use clap::Parser;
@@ -122,7 +122,22 @@ fn create_app(state: AppState) -> Router {
     .route("/auth/logout", get(auth::logout_handler))
     .with_state(state.clone());
 
+  // Assemble the simulator routers, convert to the axum Router shape,
+  // then merge alongside the base infrastructure (healthz, metrics,
+  // /scalar, OIDC, static assets).  Each simulator route file exposes
+  // an `ApiRouter` so the Scalar docs pick up their schemas.  The
+  // explicit `Router::<()>::from` resolves a method-resolution
+  // ambiguity between the various `Into<Router<_>>` impls.
+  let sim_routes: Router = Router::<()>::from(
+    routes::sim::router()
+      .merge(routes::zones::router())
+      .merge(routes::sensors::router())
+      .merge(routes::weather::router())
+      .with_state(state.clone()),
+  );
+
   web_base::base_router(state)
+    .merge(sim_routes)
     .merge(auth_router)
     .layer(session_layer)
     .layer(TraceLayer::new_for_http())
