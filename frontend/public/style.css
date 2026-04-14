@@ -820,3 +820,82 @@ button.btn-delete:hover:not([disabled]) {
   border-radius: 6px;
   margin-bottom: 1rem;
 }
+
+/* ── Properties page ─────────────────────────────────────────────────── */
+
+.properties-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.page-intro {
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+}
+
+.properties-actions {
+  margin-bottom: 1rem;
+}
+
+.property-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.property-row {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.6rem;
+  background: var(--color-surface);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 1rem;
+}
+
+.property-head {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.property-meta {
+  grid-row: 2;
+  grid-column: 1;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.property-actions {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.property-name {
+  font-weight: 600;
+}
+
+.property-id {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.badge-active {
+  background: var(--color-accent, #2a6);
+  color: white;
+  padding: 0.05rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  margin-left: 0.4rem;
+}
+
+.confirm-delete {
+  color: var(--color-error, #a33);
+  font-size: 0.9rem;
+}

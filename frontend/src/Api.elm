@@ -1,5 +1,6 @@
 module Api exposing
-    ( BomLine
+    ( ActivatedProperty
+    , BomLine
     , Catalog
     , CatalogEmitter
     , CatalogSoilType
@@ -13,7 +14,9 @@ module Api exposing
     , PlanResponse
     , PlanYardInput
     , PlanZoneInput
+    , PropertiesListResponse
     , Property
+    , PropertyListEntry
     , Reading
     , ResetResult
     , RunResult
@@ -30,14 +33,17 @@ module Api exposing
     , ZoneStatus
     , ZoneUpdateRequest
     , ZonesResponse
+    , deleteProperty
     , deleteZone
     , emptyZoneUpdate
     , fetchCatalog
+    , fetchProperties
     , fetchProperty
     , fetchSensors
     , fetchState
     , fetchWeather
     , fetchZones
+    , postActivateProperty
     , postApplyPlan
     , postCreateZone
     , postPlan
@@ -335,6 +341,29 @@ type alias PlanApplyResult =
     }
 
 
+type alias PropertiesListResponse =
+    { properties : List PropertyListEntry
+    , activePropertyId : String
+    }
+
+
+type alias PropertyListEntry =
+    { id : String
+    , name : String
+    , climateZone : String
+    , zones : Int
+    , yards : Int
+    , active : Bool
+    }
+
+
+type alias ActivatedProperty =
+    { propertyId : String
+    , propertyName : String
+    , zones : Int
+    }
+
+
 
 -- ── HTTP commands ─────────────────────────────────────────────────────────
 
@@ -458,6 +487,36 @@ postPlan req toMsg =
         { url = "/api/plan"
         , body = Http.jsonBody (planRequestEncoder req)
         , expect = Http.expectJson toMsg planResponseDecoder
+        }
+
+
+fetchProperties : (Result Http.Error PropertiesListResponse -> msg) -> Cmd msg
+fetchProperties toMsg =
+    Http.get
+        { url = "/api/properties"
+        , expect = Http.expectJson toMsg propertiesListDecoder
+        }
+
+
+postActivateProperty : String -> (Result Http.Error ActivatedProperty -> msg) -> Cmd msg
+postActivateProperty propertyId toMsg =
+    Http.post
+        { url = "/api/properties/" ++ propertyId ++ "/activate"
+        , body = Http.jsonBody (Encode.object [])
+        , expect = Http.expectJson toMsg activatedPropertyDecoder
+        }
+
+
+deleteProperty : String -> (Result Http.Error DeletedResult -> msg) -> Cmd msg
+deleteProperty propertyId toMsg =
+    Http.request
+        { method = "DELETE"
+        , headers = []
+        , url = "/api/properties/" ++ propertyId
+        , body = Http.emptyBody
+        , expect = Http.expectJson toMsg deletedPropertyDecoder
+        , timeout = Nothing
+        , tracker = Nothing
         }
 
 
@@ -827,3 +886,37 @@ planApplyResultDecoder =
         (Decode.field "property_name" Decode.string)
         (Decode.field "zones" Decode.int)
         (Decode.field "plan" planDecoder)
+
+
+propertiesListDecoder : Decoder PropertiesListResponse
+propertiesListDecoder =
+    Decode.map2 PropertiesListResponse
+        (Decode.field "properties" (Decode.list propertyListEntryDecoder))
+        (Decode.field "active_property_id" Decode.string)
+
+
+propertyListEntryDecoder : Decoder PropertyListEntry
+propertyListEntryDecoder =
+    Decode.map6 PropertyListEntry
+        (Decode.field "id" Decode.string)
+        (Decode.field "name" Decode.string)
+        (Decode.field "climate_zone" Decode.string)
+        (Decode.field "zones" Decode.int)
+        (Decode.field "yards" Decode.int)
+        (Decode.field "active" Decode.bool)
+
+
+activatedPropertyDecoder : Decoder ActivatedProperty
+activatedPropertyDecoder =
+    Decode.map3 ActivatedProperty
+        (Decode.field "property_id" Decode.string)
+        (Decode.field "property_name" Decode.string)
+        (Decode.field "zones" Decode.int)
+
+
+deletedPropertyDecoder : Decoder DeletedResult
+deletedPropertyDecoder =
+    -- The server's DELETE /api/properties/:id response names the
+    -- field `property_id`; we reuse DeletedResult's string slot.
+    Decode.map (\pid -> { zoneId = pid })
+        (Decode.field "property_id" Decode.string)

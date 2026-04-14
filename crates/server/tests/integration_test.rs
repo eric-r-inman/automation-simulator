@@ -58,6 +58,14 @@ fn build_sim_pieces() -> (
   Arc<dyn SensorSource>,
   Arc<Catalog>,
   Arc<tokio::sync::Mutex<automation_simulator_lib::seed::PropertyBundle>>,
+  Arc<
+    tokio::sync::Mutex<
+      std::collections::BTreeMap<
+        String,
+        automation_simulator_lib::seed::PropertyBundle,
+      >,
+    >,
+  >,
 ) {
   let catalog = Arc::new(Catalog::load(catalog_dir()).expect("catalog"));
   let bundle =
@@ -78,12 +86,18 @@ fn build_sim_pieces() -> (
     Arc::new(SimulatedController::new(shared.clone()));
   let sensors: Arc<dyn SensorSource> =
     Arc::new(SimulatedSensorSource::new(shared.clone()));
+  let mut registry_map: std::collections::BTreeMap<
+    String,
+    automation_simulator_lib::seed::PropertyBundle,
+  > = std::collections::BTreeMap::new();
+  registry_map.insert(bundle.property.id.as_str().to_string(), bundle.clone());
   (
     shared,
     controller,
     sensors,
     catalog,
     Arc::new(tokio::sync::Mutex::new(bundle)),
+    Arc::new(tokio::sync::Mutex::new(registry_map)),
   )
 }
 
@@ -98,7 +112,8 @@ fn stub_state_no_auth(frontend_path: PathBuf) -> AppState {
     .register(Box::new(request_counter.clone()))
     .expect("counter registration");
 
-  let (world, controller, sensors, catalog, property) = build_sim_pieces();
+  let (world, controller, sensors, catalog, property, properties) =
+    build_sim_pieces();
 
   AppState {
     registry: Arc::new(registry),
@@ -110,6 +125,7 @@ fn stub_state_no_auth(frontend_path: PathBuf) -> AppState {
     sensors,
     catalog,
     property,
+    properties,
   }
 }
 
@@ -138,7 +154,8 @@ fn stub_state_with_auth(frontend_path: PathBuf) -> AppState {
     None,
   );
 
-  let (world, controller, sensors, catalog, property) = build_sim_pieces();
+  let (world, controller, sensors, catalog, property, properties) =
+    build_sim_pieces();
 
   AppState {
     registry: Arc::new(registry),
@@ -150,6 +167,7 @@ fn stub_state_with_auth(frontend_path: PathBuf) -> AppState {
     sensors,
     catalog,
     property,
+    properties,
   }
 }
 
@@ -190,6 +208,7 @@ fn app_with_sim_routes(state: AppState) -> Router {
       .merge(routes::weather::router())
       .merge(routes::catalog::router())
       .merge(routes::planner::router())
+      .merge(routes::properties::router())
       .with_state(state.clone()),
   );
   base_router(state).merge(sim_routes)
@@ -1064,4 +1083,108 @@ async fn test_plan_apply_rejects_out_of_range_index() {
   body["plan_index"] = serde_json::Value::Number(99.into());
   let (status, _body) = json_post(&app, "/api/plan/apply", body).await;
   assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+// ── /api/properties tests ───────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_properties_starts_with_example_active() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let body = json_get(&app, "/api/properties").await;
+  assert_eq!(body["active_property_id"], "example-property");
+  let properties = body["properties"].as_array().unwrap();
+  assert_eq!(properties.len(), 1);
+  assert_eq!(properties[0]["id"], "example-property");
+  assert_eq!(properties[0]["active"], true);
+}
+
+#[tokio::test]
+async fn test_apply_plan_registers_new_property() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let mut body = plan_req_body();
+  body["property_id"] = serde_json::Value::String("second-lot".into());
+  body["property_name"] = serde_json::Value::String("Second Lot".into());
+  body["plan_index"] = serde_json::Value::Number(0.into());
+  let (status, _apply) = json_post(&app, "/api/plan/apply", body).await;
+  assert_eq!(status, StatusCode::OK);
+
+  let listing = json_get(&app, "/api/properties").await;
+  assert_eq!(listing["active_property_id"], "second-lot");
+  let ids: Vec<String> = listing["properties"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .map(|p| p["id"].as_str().unwrap().to_string())
+    .collect();
+  assert!(ids.contains(&"example-property".to_string()));
+  assert!(ids.contains(&"second-lot".to_string()));
+}
+
+#[tokio::test]
+async fn test_activate_property_swaps_simulator() {
+  let app = app_with_sim_routes(state_without_frontend());
+  // First register a second property via plan/apply.
+  let mut apply_body = plan_req_body();
+  apply_body["property_id"] = serde_json::Value::String("third-lot".into());
+  let (status, _apply) = json_post(&app, "/api/plan/apply", apply_body).await;
+  assert_eq!(status, StatusCode::OK);
+
+  // Activate the original example property — the simulator should
+  // flip back.
+  let (status, result) = json_post(
+    &app,
+    "/api/properties/example-property/activate",
+    serde_json::json!({}),
+  )
+  .await;
+  assert_eq!(status, StatusCode::OK);
+  assert_eq!(result["property_id"], "example-property");
+
+  let property = json_get(&app, "/api/sim/property").await;
+  assert_eq!(property["id"], "example-property");
+}
+
+#[tokio::test]
+async fn test_activate_unknown_property_returns_404() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, _body) =
+    json_post(&app, "/api/properties/ghost/activate", serde_json::json!({}))
+      .await;
+  assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_delete_active_property_refused() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, _body) =
+    json_delete(&app, "/api/properties/example-property").await;
+  assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_delete_inactive_property_removes_it() {
+  let app = app_with_sim_routes(state_without_frontend());
+  // Register + switch away.
+  let mut apply_body = plan_req_body();
+  apply_body["property_id"] = serde_json::Value::String("ephemeral-lot".into());
+  json_post(&app, "/api/plan/apply", apply_body).await;
+  json_post(
+    &app,
+    "/api/properties/example-property/activate",
+    serde_json::json!({}),
+  )
+  .await;
+
+  let (status, _body) =
+    json_delete(&app, "/api/properties/ephemeral-lot").await;
+  assert_eq!(status, StatusCode::OK);
+
+  let listing = json_get(&app, "/api/properties").await;
+  let ids: Vec<String> = listing["properties"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .map(|p| p["id"].as_str().unwrap().to_string())
+    .collect();
+  assert!(!ids.contains(&"ephemeral-lot".to_string()));
 }

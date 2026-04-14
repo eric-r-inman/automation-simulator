@@ -270,6 +270,16 @@ async fn apply(
     let mut world = state.world.0.lock().await;
     *world = new_world;
   }
+  {
+    // Park the applied bundle in the registry so the user can
+    // switch back to it from the Properties page after exploring
+    // other plans or properties.
+    let mut registry = state.properties.lock().await;
+    registry.insert(
+      chosen.bundle.property.id.as_str().to_string(),
+      chosen.bundle.clone(),
+    );
+  }
 
   info!(
     property_id = %chosen.bundle.property.id,
