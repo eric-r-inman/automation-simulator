@@ -1036,3 +1036,32 @@ async fn test_plan_rejects_zero_zones() {
   let (status, _body) = json_post(&app, "/api/plan", body).await;
   assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn test_plan_apply_swaps_running_property() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let mut body = plan_req_body();
+  body["property_id"] = serde_json::Value::String("reworked-portland".into());
+  body["property_name"] = serde_json::Value::String("Reworked Portland".into());
+  body["plan_index"] = serde_json::Value::Number(0.into());
+
+  let (status, apply) = json_post(&app, "/api/plan/apply", body).await;
+  assert_eq!(status, StatusCode::OK);
+  assert_eq!(apply["property_id"], "reworked-portland");
+  assert_eq!(apply["zones"], 2);
+
+  // The simulator's property endpoint should now reflect the new
+  // property, not the example fixture.
+  let property = json_get(&app, "/api/sim/property").await;
+  assert_eq!(property["id"], "reworked-portland");
+  assert_eq!(property["zones"].as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn test_plan_apply_rejects_out_of_range_index() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let mut body = plan_req_body();
+  body["plan_index"] = serde_json::Value::Number(99.into());
+  let (status, _body) = json_post(&app, "/api/plan/apply", body).await;
+  assert_eq!(status, StatusCode::BAD_REQUEST);
+}

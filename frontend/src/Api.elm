@@ -7,6 +7,7 @@ module Api exposing
     , DeletedResult
     , Manifold
     , Plan
+    , PlanApplyResult
     , PlanBom
     , PlanRequest
     , PlanResponse
@@ -37,6 +38,7 @@ module Api exposing
     , fetchState
     , fetchWeather
     , fetchZones
+    , postApplyPlan
     , postCreateZone
     , postPlan
     , postReset
@@ -325,6 +327,14 @@ type alias BomLine =
     }
 
 
+type alias PlanApplyResult =
+    { propertyId : String
+    , propertyName : String
+    , zones : Int
+    , plan : Plan
+    }
+
+
 
 -- ── HTTP commands ─────────────────────────────────────────────────────────
 
@@ -451,9 +461,33 @@ postPlan req toMsg =
         }
 
 
+postApplyPlan : PlanRequest -> Int -> (Result Http.Error PlanApplyResult -> msg) -> Cmd msg
+postApplyPlan req planIndex toMsg =
+    let
+        baseObj : List ( String, Encode.Value )
+        baseObj =
+            planRequestFields req
+    in
+    Http.post
+        { url = "/api/plan/apply"
+        , body =
+            Http.jsonBody
+                (Encode.object
+                    (baseObj ++ [ ( "plan_index", Encode.int planIndex ) ])
+                )
+        , expect = Http.expectJson toMsg planApplyResultDecoder
+        }
+
+
 planRequestEncoder : PlanRequest -> Encode.Value
 planRequestEncoder req =
+    Encode.object (planRequestFields req)
+
+
+planRequestFields : PlanRequest -> List ( String, Encode.Value )
+planRequestFields req =
     let
+        budget : List ( String, Encode.Value )
         budget =
             case req.budgetUsd of
                 Just b ->
@@ -462,18 +496,16 @@ planRequestEncoder req =
                 Nothing ->
                     []
     in
-    Encode.object
-        ([ ( "property_id", Encode.string req.propertyId )
-         , ( "property_name", Encode.string req.propertyName )
-         , ( "climate_zone", Encode.string req.climateZone )
-         , ( "yards", Encode.list planYardEncoder req.yards )
-         , ( "prefer_smart_controller", Encode.bool req.preferSmartController )
-         , ( "require_pressure_compensating", Encode.bool req.requirePressureCompensating )
-         , ( "soil_type_id", Encode.string req.soilTypeId )
-         , ( "top_n", Encode.int req.topN )
-         ]
-            ++ budget
-        )
+    [ ( "property_id", Encode.string req.propertyId )
+    , ( "property_name", Encode.string req.propertyName )
+    , ( "climate_zone", Encode.string req.climateZone )
+    , ( "yards", Encode.list planYardEncoder req.yards )
+    , ( "prefer_smart_controller", Encode.bool req.preferSmartController )
+    , ( "require_pressure_compensating", Encode.bool req.requirePressureCompensating )
+    , ( "soil_type_id", Encode.string req.soilTypeId )
+    , ( "top_n", Encode.int req.topN )
+    ]
+        ++ budget
 
 
 planYardEncoder : PlanYardInput -> Encode.Value
@@ -786,3 +818,12 @@ bomLineDecoder =
         (Decode.field "quantity" Decode.int)
         (Decode.field "unit_price_usd" Decode.float)
         (Decode.field "line_total_usd" Decode.float)
+
+
+planApplyResultDecoder : Decoder PlanApplyResult
+planApplyResultDecoder =
+    Decode.map4 PlanApplyResult
+        (Decode.field "property_id" Decode.string)
+        (Decode.field "property_name" Decode.string)
+        (Decode.field "zones" Decode.int)
+        (Decode.field "plan" planDecoder)
