@@ -12,7 +12,9 @@ pub mod sensors;
 pub mod sim;
 pub mod weather;
 pub mod zones;
+pub mod zones_crud;
 
+use automation_simulator_lib::engine::SimWorldError;
 use automation_simulator_lib::hw::{ControllerError, SensorError};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -83,6 +85,22 @@ impl From<SensorError> for ApiError {
       SensorError::Unreachable(_) | SensorError::Timeout { .. } => {
         Self::Upstream(e.to_string())
       }
+    }
+  }
+}
+
+impl From<SimWorldError> for ApiError {
+  fn from(e: SimWorldError) -> Self {
+    match e {
+      SimWorldError::UnknownZone(id) => {
+        Self::ZoneNotFound(format!("zone {id}"))
+      }
+      SimWorldError::DuplicateZone(id) => {
+        Self::BadRequest(format!("zone {id} already exists"))
+      }
+      SimWorldError::UnknownSoilType(_, _)
+      | SimWorldError::UnknownEmitterSpec(_, _)
+      | SimWorldError::UnknownClimateZone(_) => Self::BadRequest(e.to_string()),
     }
   }
 }

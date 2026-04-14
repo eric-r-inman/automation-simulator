@@ -103,7 +103,10 @@ pub struct ResetResponse {
 // ── Handlers ─────────────────────────────────────────────────────────────────
 
 async fn get_property(State(state): State<AppState>) -> Json<PropertyResponse> {
-  let p = &state.property.property;
+  // Lock briefly + clone what we need, drop the lock before
+  // building the response so we never hold across an await.
+  let bundle = state.property.lock().await.clone();
+  let p = &bundle.property;
   Json(PropertyResponse {
     id: p.id.as_str().to_string(),
     name: p.name.clone(),
@@ -127,8 +130,7 @@ async fn get_property(State(state): State<AppState>) -> Json<PropertyResponse> {
         notes: s.notes.clone(),
       })
       .collect(),
-    zones: state
-      .property
+    zones: bundle
       .zones
       .iter()
       .map(|z| ZoneSummary {
@@ -202,8 +204,10 @@ async fn post_reset(State(state): State<AppState>) -> ApiResult<ResetResponse> {
   // Rebuild SimWorld with the same inputs and swap it into the
   // mutex.  Bounces all per-zone soil and valve state + clears
   // history.  Uses the same seed so determinism holds.
-  let zones = state.property.zones.clone();
-  let climate_zone = state.property.property.climate_zone.clone();
+  let (zones, climate_zone) = {
+    let bundle = state.property.lock().await;
+    (bundle.zones.clone(), bundle.property.climate_zone.clone())
+  };
   let new_world = SimWorld::new(
     NaiveDate::from_ymd_opt(2026, 7, 1).expect("valid date"),
     &climate_zone,

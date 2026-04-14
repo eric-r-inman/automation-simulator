@@ -60,10 +60,12 @@ pub struct AppState {
   /// is available; kept here so each request does not re-parse the
   /// TOML.
   pub catalog: Arc<Catalog>,
-  /// Validated property bundle loaded at startup.  Served as JSON at
-  /// `/api/sim/property` and used by routes that need to answer
-  /// "what does this property look like?"  without hitting SimWorld.
-  pub property: Arc<PropertyBundle>,
+  /// Validated property bundle loaded at startup.  Wrapped in a
+  /// tokio Mutex so the zone-CRUD routes can mutate the property's
+  /// zone roster atomically with the corresponding `SimWorld`
+  /// update.  Reads (e.g. `GET /api/sim/property`) lock briefly,
+  /// clone, drop the lock — never hold across `.await`.
+  pub property: Arc<tokio::sync::Mutex<PropertyBundle>>,
 }
 
 #[derive(Debug, Error)]
@@ -212,7 +214,7 @@ impl AppState {
       controller,
       sensors,
       catalog,
-      property: Arc::new(bundle),
+      property: Arc::new(tokio::sync::Mutex::new(bundle)),
     })
   }
 }

@@ -95,6 +95,9 @@ pub enum SimWorldError {
 
   #[error("tried to open/close zone {0} but no such zone exists in the world")]
   UnknownZone(ZoneId),
+
+  #[error("cannot add zone {0}: a zone with that id is already in the world")]
+  DuplicateZone(ZoneId),
 }
 
 // ── SimWorld ─────────────────────────────────────────────────────────────────
@@ -199,6 +202,85 @@ impl SimWorld {
       _ => end,
     });
     Ok(())
+  }
+
+  /// Add a zone to the running world.  Validates catalog refs the
+  /// same way `new` does so a stale soil-type / emitter-spec id
+  /// fails loudly at the call site rather than silently producing
+  /// no moisture changes.  Initial soil moisture is the same value
+  /// the simulator's boot path uses (default 0.30).
+  pub fn add_zone(
+    &mut self,
+    zone: Zone,
+    initial_vwc: f64,
+  ) -> Result<(), SimWorldError> {
+    if self.zones.iter().any(|z| z.id == zone.id) {
+      return Err(SimWorldError::DuplicateZone(zone.id));
+    }
+    if !self.catalog.soil_types.contains_key(&zone.soil_type_id) {
+      return Err(SimWorldError::UnknownSoilType(
+        zone.id.clone(),
+        zone.soil_type_id.clone(),
+      ));
+    }
+    if !self.catalog.emitters.contains_key(&zone.emitter_spec_id) {
+      return Err(SimWorldError::UnknownEmitterSpec(
+        zone.id.clone(),
+        zone.emitter_spec_id.clone(),
+      ));
+    }
+    self
+      .soil
+      .insert(zone.id.clone(), SoilState::new(initial_vwc));
+    self.valves.insert(zone.id.clone(), ValveState::default());
+    self.zones.push(zone);
+    Ok(())
+  }
+
+  /// Replace the definition of an existing zone in place.  The
+  /// zone's id is taken from `updated.id`; the previous zone with
+  /// that id is overwritten.  Soil + valve state are preserved
+  /// (the new definition shares the same operational history).
+  /// Catalog refs are re-validated.
+  pub fn update_zone(&mut self, updated: Zone) -> Result<(), SimWorldError> {
+    let idx = self
+      .zones
+      .iter()
+      .position(|z| z.id == updated.id)
+      .ok_or_else(|| SimWorldError::UnknownZone(updated.id.clone()))?;
+    if !self.catalog.soil_types.contains_key(&updated.soil_type_id) {
+      return Err(SimWorldError::UnknownSoilType(
+        updated.id.clone(),
+        updated.soil_type_id.clone(),
+      ));
+    }
+    if !self.catalog.emitters.contains_key(&updated.emitter_spec_id) {
+      return Err(SimWorldError::UnknownEmitterSpec(
+        updated.id.clone(),
+        updated.emitter_spec_id.clone(),
+      ));
+    }
+    self.zones[idx] = updated;
+    Ok(())
+  }
+
+  /// Remove a zone from the world.  Drops the soil + valve state
+  /// for that id and prunes the recorded history.  Returns the
+  /// removed `Zone` so callers can confirm what was deleted.
+  pub fn remove_zone(
+    &mut self,
+    zone_id: &ZoneId,
+  ) -> Result<Zone, SimWorldError> {
+    let idx = self
+      .zones
+      .iter()
+      .position(|z| &z.id == zone_id)
+      .ok_or_else(|| SimWorldError::UnknownZone(zone_id.clone()))?;
+    let removed = self.zones.remove(idx);
+    self.soil.remove(zone_id);
+    self.valves.remove(zone_id);
+    self.history.retain(|s| &s.zone_id != zone_id);
+    Ok(removed)
   }
 
   pub fn close_zone(&mut self, zone_id: &ZoneId) -> Result<(), SimWorldError> {
@@ -438,6 +520,123 @@ mod tests {
       vwc > 0.20,
       "expected irrigation to raise moisture, got {vwc} (started 0.20)"
     );
+  }
+
+  #[test]
+  fn add_zone_inserts_state() {
+    let mut world = SimWorld::new(
+      NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+      "portland-or",
+      vec![test_zone()],
+      seed_catalog(),
+      1,
+      0.30,
+      Vec::new(),
+    )
+    .expect("world");
+    let mut new_zone = test_zone();
+    new_zone.id = ZoneId::new("z2");
+    world.add_zone(new_zone, 0.25).expect("add");
+    assert_eq!(world.zones.len(), 2);
+    assert_eq!(world.soil[&ZoneId::new("z2")].vwc, 0.25);
+    assert!(world.valves.contains_key(&ZoneId::new("z2")));
+  }
+
+  #[test]
+  fn add_zone_rejects_duplicate_id() {
+    let mut world = SimWorld::new(
+      NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+      "portland-or",
+      vec![test_zone()],
+      seed_catalog(),
+      1,
+      0.30,
+      Vec::new(),
+    )
+    .expect("world");
+    let err = world.add_zone(test_zone(), 0.30).unwrap_err();
+    assert!(matches!(err, SimWorldError::DuplicateZone(_)));
+  }
+
+  #[test]
+  fn add_zone_rejects_unknown_emitter() {
+    let mut world = SimWorld::new(
+      NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+      "portland-or",
+      vec![test_zone()],
+      seed_catalog(),
+      1,
+      0.30,
+      Vec::new(),
+    )
+    .expect("world");
+    let mut bad = test_zone();
+    bad.id = ZoneId::new("z2");
+    bad.emitter_spec_id = EmitterSpecId::new("nonexistent");
+    let err = world.add_zone(bad, 0.30).unwrap_err();
+    assert!(matches!(err, SimWorldError::UnknownEmitterSpec(_, _)));
+  }
+
+  #[test]
+  fn update_zone_replaces_definition_keeps_state() {
+    let mut world = SimWorld::new(
+      NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+      "portland-or",
+      vec![test_zone()],
+      seed_catalog(),
+      1,
+      0.30,
+      Vec::new(),
+    )
+    .expect("world");
+    let original_vwc = world.soil[&ZoneId::new("z1")].vwc;
+    let mut updated = test_zone();
+    updated.area_sq_ft = 999.0;
+    updated.notes = Some("new notes".into());
+    world.update_zone(updated).expect("update");
+    assert_eq!(world.zones[0].area_sq_ft, 999.0);
+    // Soil state preserved.
+    assert_eq!(world.soil[&ZoneId::new("z1")].vwc, original_vwc);
+  }
+
+  #[test]
+  fn update_zone_rejects_unknown_id() {
+    let mut world = SimWorld::new(
+      NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+      "portland-or",
+      vec![test_zone()],
+      seed_catalog(),
+      1,
+      0.30,
+      Vec::new(),
+    )
+    .expect("world");
+    let mut bogus = test_zone();
+    bogus.id = ZoneId::new("ghost");
+    let err = world.update_zone(bogus).unwrap_err();
+    assert!(matches!(err, SimWorldError::UnknownZone(_)));
+  }
+
+  #[test]
+  fn remove_zone_drops_state_and_history() {
+    let mut world = SimWorld::new(
+      NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+      "portland-or",
+      vec![test_zone()],
+      seed_catalog(),
+      1,
+      0.30,
+      Vec::new(),
+    )
+    .expect("world");
+    world.advance(SimDuration::hours(2));
+    assert!(!world.history.is_empty());
+    let removed = world.remove_zone(&ZoneId::new("z1")).expect("remove");
+    assert_eq!(removed.id.as_str(), "z1");
+    assert!(world.zones.is_empty());
+    assert!(world.soil.is_empty());
+    assert!(world.valves.is_empty());
+    assert!(world.history.is_empty());
   }
 
   #[test]
