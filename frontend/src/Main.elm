@@ -1,17 +1,33 @@
 module Main exposing (main)
 
+{-| Top-level shell + URL routing.
+
+Two routes for v0.1: the dashboard at `/` (everything the
+homeowner needs) and the legacy `/me` page from the template
+(kept so the OIDC flow still has a landing page when authentication
+is enabled). `Main.elm` stays a thin orchestrator: it owns the
+URL key, decodes the URL into a route, holds whichever page model
+applies, and forwards messages to the page's `update` /`view`.
+
+-}
+
 import Browser
 import Browser.Navigation as Nav
-import Html exposing (..)
-import Html.Attributes exposing (..)
+import Html exposing (Html, a, div, h1, main_, nav, p, text)
+import Html.Attributes as Attr
 import Http
 import Json.Decode as Decode
+import Page.Dashboard as Dashboard
 import Url exposing (Url)
 import Url.Parser exposing (Parser, oneOf, top)
 
 
+
+-- ── Routing ───────────────────────────────────────────────────────────────
+
+
 type Route
-    = Home
+    = Dashboard
     | Me
     | NotFound
 
@@ -19,7 +35,7 @@ type Route
 routeParser : Parser (Route -> a) a
 routeParser =
     oneOf
-        [ Url.Parser.map Home top
+        [ Url.Parser.map Dashboard top
         , Url.Parser.map Me (Url.Parser.s "me")
         ]
 
@@ -30,6 +46,10 @@ routeFromUrl url =
         |> Maybe.withDefault NotFound
 
 
+
+-- ── Me page (kept for OIDC) ───────────────────────────────────────────────
+
+
 type alias MeInfo =
     { name : String
     , authEnabled : Bool
@@ -37,22 +57,36 @@ type alias MeInfo =
 
 
 type MeStatus
-    = Loading
-    | Loaded MeInfo
-    | Failed
+    = MeLoading
+    | MeLoaded MeInfo
+    | MeFailed
+
+
+
+-- ── Page model union ──────────────────────────────────────────────────────
+
+
+type Page
+    = DashboardPage Dashboard.Model
+    | MePage MeStatus
+    | NotFoundPage
+
+
+
+-- ── Top-level model ───────────────────────────────────────────────────────
 
 
 type alias Model =
     { key : Nav.Key
     , url : Url
-    , route : Route
-    , me : MeStatus
+    , page : Page
     }
 
 
 type Msg
     = UrlRequested Browser.UrlRequest
     | UrlChanged Url
+    | DashboardMsg Dashboard.Msg
     | GotMe (Result Http.Error MeInfo)
 
 
@@ -71,22 +105,29 @@ main =
 init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init _ url key =
     let
-        route =
-            routeFromUrl url
+        ( page, cmd ) =
+            initPage (routeFromUrl url)
     in
-    ( { key = key, url = url, route = route, me = Loading }
-    , cmdForRoute route
+    ( { key = key, url = url, page = page }
+    , cmd
     )
 
 
-cmdForRoute : Route -> Cmd Msg
-cmdForRoute route =
+initPage : Route -> ( Page, Cmd Msg )
+initPage route =
     case route of
-        Me ->
-            fetchMe
+        Dashboard ->
+            let
+                ( m, c ) =
+                    Dashboard.init
+            in
+            ( DashboardPage m, Cmd.map DashboardMsg c )
 
-        _ ->
-            Cmd.none
+        Me ->
+            ( MePage MeLoading, fetchMe )
+
+        NotFound ->
+            ( NotFoundPage, Cmd.none )
 
 
 fetchMe : Cmd Msg
@@ -104,6 +145,10 @@ meDecoder =
         (Decode.field "auth_enabled" Decode.bool)
 
 
+
+-- ── Update ────────────────────────────────────────────────────────────────
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -115,33 +160,59 @@ update msg model =
 
         UrlChanged url ->
             let
-                route =
-                    routeFromUrl url
+                ( page, cmd ) =
+                    initPage (routeFromUrl url)
             in
-            ( { model | url = url, route = route, me = Loading }
-            , cmdForRoute route
-            )
+            ( { model | url = url, page = page }, cmd )
+
+        DashboardMsg dmsg ->
+            case model.page of
+                DashboardPage dmodel ->
+                    let
+                        ( newModel, cmd ) =
+                            Dashboard.update dmsg dmodel
+                    in
+                    ( { model | page = DashboardPage newModel }
+                    , Cmd.map DashboardMsg cmd
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
 
         GotMe result ->
-            case result of
-                Ok info ->
-                    ( { model | me = Loaded info }, Cmd.none )
+            case model.page of
+                MePage _ ->
+                    let
+                        next : MeStatus
+                        next =
+                            case result of
+                                Ok info ->
+                                    MeLoaded info
 
-                Err _ ->
-                    ( { model | me = Failed }, Cmd.none )
+                                Err _ ->
+                                    MeFailed
+                    in
+                    ( { model | page = MePage next }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+
+
+-- ── View ──────────────────────────────────────────────────────────────────
 
 
 view : Model -> Browser.Document Msg
 view model =
     { title = "automation-simulator"
     , body =
-        [ main_ []
-            [ nav []
-                [ a [ href "/" ] [ text "Home" ]
-                , text " | "
-                , a [ href "/me" ] [ text "Me" ]
-                , text " | "
-                , a [ href "/scalar" ] [ text "API docs" ]
+        [ main_ [ Attr.class "site" ]
+            [ nav [ Attr.class "site-nav" ]
+                [ a [ Attr.href "/" ] [ text "Dashboard" ]
+                , text " · "
+                , a [ Attr.href "/me" ] [ text "Me" ]
+                , text " · "
+                , a [ Attr.href "/scalar" ] [ text "API docs" ]
                 ]
             , viewPage model
             ]
@@ -151,18 +222,15 @@ view model =
 
 viewPage : Model -> Html Msg
 viewPage model =
-    case model.route of
-        Home ->
-            div []
-                [ h1 [] [ text "automation-simulator" ]
-                , p [] [ text "Your application is running." ]
-                ]
+    case model.page of
+        DashboardPage dmodel ->
+            Html.map DashboardMsg (Dashboard.view dmodel)
 
-        Me ->
-            viewMe model.me
+        MePage status ->
+            viewMe status
 
-        NotFound ->
-            div []
+        NotFoundPage ->
+            div [ Attr.class "not-found" ]
                 [ h1 [] [ text "Not found" ]
                 , p [] [ text "The page you requested does not exist." ]
                 ]
@@ -171,14 +239,14 @@ viewPage model =
 viewMe : MeStatus -> Html Msg
 viewMe status =
     case status of
-        Loading ->
-            p [] [ text "Loading..." ]
+        MeLoading ->
+            p [] [ text "Loading…" ]
 
-        Failed ->
+        MeFailed ->
             p [] [ text "Failed to load user information." ]
 
-        Loaded info ->
-            div []
+        MeLoaded info ->
+            div [ Attr.class "me-page" ]
                 [ h1 [] [ text "Me" ]
                 , p [] [ text ("Name: " ++ info.name) ]
                 , p []
