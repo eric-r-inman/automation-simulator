@@ -1,0 +1,93 @@
+# Plant species referenced by the property fixture.  Each row
+# carries the baseline daily water need that scenarios scale by
+# weather and maturity; the domain-level Plant struct can override
+# per instance.
+
+[tomato-sungold]
+id = "tomato-sungold"
+common_name = "Sungold Tomato"
+scientific_name = "Solanum lycopersicum 'Sungold'"
+kind = "veggie-bed"
+water_need_base_ml_per_day = 2000.0
+root_depth_inches = 18.0
+mature_size_sq_ft = 6.0
+hardiness_zone_min = 5
+hardiness_zone_max = 10
+
+[kale-lacinato]
+id = "kale-lacinato"
+common_name = "Lacinato Kale"
+scientific_name = "Brassica oleracea 'Lacinato'"
+kind = "veggie-bed"
+water_need_base_ml_per_day = 800.0
+root_depth_inches = 12.0
+mature_size_sq_ft = 3.0
+hardiness_zone_min = 7
+hardiness_zone_max = 11
+
+[blueberry-bluecrop]
+id = "blueberry-bluecrop"
+common_name = "Bluecrop Blueberry"
+scientific_name = "Vaccinium corymbosum 'Bluecrop'"
+kind = "shrub"
+water_need_base_ml_per_day = 4000.0
+root_depth_inches = 24.0
+mature_size_sq_ft = 25.0
+hardiness_zone_min = 4
+hardiness_zone_max = 8
+
+[raspberry-caroline]
+id = "raspberry-caroline"
+common_name = "Caroline Raspberry"
+scientific_name = "Rubus idaeus 'Caroline'"
+kind = "shrub"
+water_need_base_ml_per_day = 3500.0
+root_depth_inches = 18.0
+mature_size_sq_ft = 9.0
+hardiness_zone_min = 4
+hardiness_zone_max = 9
+
+[rhubarb-victoria]
+id = "rhubarb-victoria"
+common_name = "Victoria Rhubarb"
+scientific_name = "Rheum rhabarbarum 'Victoria'"
+kind = "perennial"
+water_need_base_ml_per_day = 2500.0
+root_depth_inches = 24.0
+mature_size_sq_ft = 12.0
+hardiness_zone_min = 3
+hardiness_zone_max = 8
+
+[lavender-hidcote]
+id = "lavender-hidcote"
+common_name = "Hidcote Lavender"
+scientific_name = "Lavandula angustifolia 'Hidcote'"
+kind = "perennial"
+water_need_base_ml_per_day = 600.0
+root_depth_inches = 18.0
+mature_size_sq_ft = 4.0
+hardiness_zone_min = 5
+hardiness_zone_max = 9
+notes = "Mediterranean — tolerates drought once established."
+
+[currant-red-lake]
+id = "currant-red-lake"
+common_name = "Red Lake Currant"
+scientific_name = "Ribes rubrum 'Red Lake'"
+kind = "shrub"
+water_need_base_ml_per_day = 2500.0
+root_depth_inches = 18.0
+mature_size_sq_ft = 16.0
+hardiness_zone_min = 3
+hardiness_zone_max = 7
+
+[elderberry-nova]
+id = "elderberry-nova"
+common_name = "Nova Elderberry"
+scientific_name = "Sambucus canadensis 'Nova'"
+kind = "shrub"
+water_need_base_ml_per_day = 5000.0
+root_depth_inches = 30.0
+mature_size_sq_ft = 40.0
+hardiness_zone_min = 3
+hardiness_zone_max = 9

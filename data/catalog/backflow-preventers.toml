@@ -1,0 +1,13 @@
+# Backflow preventers stop irrigation water from flowing back into
+# the potable supply.  Oregon requires at least an atmospheric
+# vacuum breaker (AVB) on each residential spigot used for
+# irrigation; some municipalities require a pressure vacuum breaker
+# (PVB) or higher.
+
+[generic-avb]
+id = "generic-avb"
+name = "Generic Atmospheric Vacuum Breaker"
+manufacturer = "Example Manufacturer"
+price_usd = 15.00
+kind = "atmospheric-vacuum-breaker"
+notes = "Minimum legally acceptable backflow protection for residential drip."

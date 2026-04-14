@@ -1,0 +1,60 @@
+# Emitter specs referenced by zones.  Ids match the soft-warn
+# recommendations in `crates/lib/src/sim/zone.rs` (typical pairings
+# per PlantKind), so adding a zone with a matching emitter does not
+# trigger a warning.
+
+[inline-drip-12in]
+id = "inline-drip-12in"
+name = "Inline Drip, 12\" Spacing, 0.9 GPH"
+manufacturer = "Example Manufacturer"
+price_usd_per_100 = 30.00
+shape = "inline-drip"
+flow_gph = 0.9
+min_inlet_psi = 15.0
+pressure_compensating = true
+inline_spacing_inches = 12.0
+notes = "Standard choice for raised vegetable beds."
+
+[micro-spray]
+id = "micro-spray"
+name = "Adjustable Micro-Spray Head"
+manufacturer = "Example Manufacturer"
+price_usd_per_100 = 12.00
+shape = "micro-spray"
+flow_gph = 12.0
+min_inlet_psi = 20.0
+pressure_compensating = false
+notes = "90/180/360 degree adjustable pattern."
+
+[1gph-pc]
+id = "1gph-pc"
+name = "1.0 GPH Pressure-Compensating Point Emitter"
+manufacturer = "Example Manufacturer"
+price_usd_per_100 = 25.00
+shape = "point-emitter"
+flow_gph = 1.0
+min_inlet_psi = 10.0
+pressure_compensating = true
+notes = "Typical shrub and perennial emitter."
+
+[2gph-pc]
+id = "2gph-pc"
+name = "2.0 GPH Pressure-Compensating Point Emitter"
+manufacturer = "Example Manufacturer"
+price_usd_per_100 = 28.00
+shape = "point-emitter"
+flow_gph = 2.0
+min_inlet_psi = 10.0
+pressure_compensating = true
+notes = "For larger shrubs and young trees."
+
+[bubbler]
+id = "bubbler"
+name = "Adjustable Basin Bubbler"
+manufacturer = "Example Manufacturer"
+price_usd_per_100 = 60.00
+shape = "bubbler"
+flow_gph = 20.0
+min_inlet_psi = 20.0
+pressure_compensating = false
+notes = "Trees and tree basins."

@@ -1,0 +1,14 @@
+# Weather stations that feed the simulator's weather panel and
+# inform scheduling decisions.
+
+[example-ws]
+id = "example-ws"
+name = "Generic All-In-One Weather Station"
+manufacturer = "Example Manufacturer"
+price_usd = 120.00
+measures_temperature = true
+measures_humidity = true
+measures_wind = true
+measures_rain = true
+measures_solar = true
+notes = "Property-level station, mounted on a pole."

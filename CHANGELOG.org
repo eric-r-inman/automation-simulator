@@ -3,6 +3,14 @@
 
 * Upcoming
 
+- Add the hardware and species catalog at =crates/lib/src/catalog/=
+  plus seed rows under =data/catalog/=.  Each category (controllers,
+  sensors, weather stations, manifolds, valves, emitters, pressure
+  regulators, backflow preventers, drip lines, species, soil types)
+  loads from its own TOML file, cross-validates against the rest of
+  the catalog, and raises semantic =CatalogLoadError= variants on
+  bad input.  Growing support for new hardware in v0.3 is a data
+  change only.
 - Add the simulation domain model under =crates/lib/src/sim/= —
   catalog-driven property, yard, spigot, zone, manifold, plant,
   hardware-instance, and scenario types with typed-id newtypes,

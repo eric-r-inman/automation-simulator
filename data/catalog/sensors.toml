@@ -1,0 +1,21 @@
+# Sensors: soil moisture, flow, pressure, temperature, plus the
+# wireless gateway some sensors relay through.  The loader
+# cross-validates every `gateway_model_id` against the sensors map
+# in this file.
+
+[example-wireless-gateway]
+id = "example-wireless-gateway"
+name = "Generic Wireless Sensor Gateway"
+manufacturer = "Example Manufacturer"
+price_usd = 50.00
+kind = "gateway"
+notes = "Relays wireless sensor traffic to the controller host over HTTP push."
+
+[example-soil-sensor]
+id = "example-soil-sensor"
+name = "Generic Wireless Soil Moisture Sensor"
+manufacturer = "Example Manufacturer"
+price_usd = 20.00
+kind = "soil-moisture"
+gateway_model_id = "example-wireless-gateway"
+notes = "Battery-powered probe, one per zone."
