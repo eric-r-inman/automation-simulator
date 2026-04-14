@@ -3,3 +3,12 @@
 
 * Upcoming
 
+- Add the simulation domain model under =crates/lib/src/sim/= —
+  catalog-driven property, yard, spigot, zone, manifold, plant,
+  hardware-instance, and scenario types with typed-id newtypes,
+  candidate =*Raw= types, semantic =thiserror= validation errors,
+  and unit tests for every invariant.  Adds a compliance test that
+  rejects brand names and property-specific labels inside the lib
+  crate so v0.3 mix-and-match planning stays a data change, not a
+  refactor.
+
