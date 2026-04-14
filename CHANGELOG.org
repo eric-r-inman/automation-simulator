@@ -3,6 +3,18 @@
 
 * Upcoming
 
+- Add the property-fixture loader at =crates/lib/src/seed/= and the
+  =cli seed= subcommand.  Loader parses a property TOML file into
+  validated domain types, cross-references it against the catalog
+  and its own internal ids, and inserts the bundle into a
+  migrated SQLite database.  Ships =data/properties/example-property.toml=
+  (2 yards, 2 spigots, 6 zones, 10 plants, 1 controller, 6
+  sensors, 1 weather station, 6 schedule items) and the
+  accompanying =docs/property-schema.org= reference.  CLI is
+  restructured around a =clap::Subcommand= so additional
+  subcommands land without another refactor.  Amends the Phase 4
+  init migration to add =weather_station_instance= alongside the
+  other hardware-instance tables.
 - Add the SQLite persistence layer at =crates/lib/src/db/= and
   =crates/lib/migrations/=.  One STRICT-mode init migration sets up
   every table the v0.1–v0.3 pipeline needs (property, yard, spigot,

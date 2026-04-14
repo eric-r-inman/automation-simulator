@@ -80,6 +80,15 @@ CREATE TABLE sensor_instance (
   notes TEXT
 ) STRICT;
 
+CREATE TABLE weather_station_instance (
+  id TEXT PRIMARY KEY NOT NULL,
+  property_id TEXT NOT NULL REFERENCES property(id) ON DELETE CASCADE,
+  model_id TEXT NOT NULL,
+  -- NULL means the station is property-level, not tied to a yard.
+  yard_id TEXT REFERENCES yard(id) ON DELETE RESTRICT,
+  notes TEXT
+) STRICT;
+
 CREATE TABLE sensor_reading (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   property_id TEXT NOT NULL REFERENCES property(id) ON DELETE CASCADE,

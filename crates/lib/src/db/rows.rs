@@ -101,6 +101,15 @@ pub struct SensorInstanceRow {
   pub notes: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+pub struct WeatherStationInstanceRow {
+  pub id: String,
+  pub property_id: String,
+  pub model_id: String,
+  pub yard_id: Option<String>,
+  pub notes: Option<String>,
+}
+
 // ── History + schedule ───────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]

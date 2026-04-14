@@ -10,6 +10,7 @@ DROP INDEX IF EXISTS ix_watering_log_by_zone_time;
 DROP TABLE IF EXISTS watering_log;
 DROP INDEX IF EXISTS ix_sensor_reading_by_zone_time;
 DROP TABLE IF EXISTS sensor_reading;
+DROP TABLE IF EXISTS weather_station_instance;
 DROP TABLE IF EXISTS sensor_instance;
 DROP TABLE IF EXISTS controller_instance;
 DROP TABLE IF EXISTS plant;
