@@ -19,6 +19,10 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+# Used by the db layer for JSON-encoded columns (controller zone
+# assignments, sim-event payloads, property-design state) and shared
+# with the catalog loader.
+serde_json = { workspace = true }
 
 [dependencies.toml]
 workspace = true
@@ -27,7 +31,9 @@ workspace = true
 cargo-husky = { version = "1", default-features = false, features = ["user-hooks"] }
 proptest = { workspace = true }
 insta = { workspace = true }
-serde_json = { workspace = true }
 # Catalog loader tests build ad-hoc catalog directories so changes to
 # seeded fixtures cannot break loader invariants and vice versa.
 tempfile = { workspace = true }
+# Round-trip db tests need a real tokio runtime because sqlx is
+# async-only.
+tokio = { workspace = true }
