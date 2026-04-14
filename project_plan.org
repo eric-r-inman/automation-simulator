@@ -1,0 +1,789 @@
+#+title:     automation-simulator — Project Plan
+#+author:    Eric Rinman
+#+language:  en
+#+startup:   overview
+
+* Context and goal
+
+We are building a simulator for an automatic, multi-zone food forest
+irrigation system inside the rust-template workspace at
+[[file:./][./]].  The work proceeds in three stages:
+
+1. *Simulator-first (v0.1)* — a fully working simulation of the real
+   property at *3702 N. Arlington Place, Portland, Oregon* — 6
+   irrigation zones across two spigots (front + back), no physical
+   hardware required.  The whole downstream pipeline (schedules, UI,
+   history, recommendations) runs against this simulation.
+2. *Real hardware (v0.2)* — once the simulator is convincing, we add
+   drivers that talk to actual OpenSprinkler and Ecowitt hardware
+   behind the same traits.  The homeowner at 3702 N. Arlington is the
+   first real-world deployment.
+3. *Mix-and-match planner (v0.3)* — once the simulator is working for
+   the test-case real property, we add capacity to plan for any real
+   property with mix-and-match tech (hardware and software) setup.
+   This means: arbitrary property geometry and plantings, a catalog of
+   supported controllers / sensors / valves / emitters, and a
+   recommendation engine that turns a property description into a
+   costed, compatible bill of materials that the user can then
+   simulate against.
+
+The single-trait-surface decision from stage 1 is what makes stages 2
+and 3 cheap: every concrete controller / sensor / weather source is
+just another implementation of the traits the rest of the system is
+already written against.
+
+Success for v0.1 is: a user loads the seed property, advances
+simulated time, and sees zones drip, soil moisture rise and fall, and
+scheduled runs fire — all in the browser, served by the Axum server
+in this workspace.  Stages 2 and 3 have their own success criteria
+captured in Phases 11–14 below.
+
+* Scope boundary across the three stages
+
+| Concern                  | Simulator (v0.1)                                                        | Real hardware (v0.2)                             | Planner / mix-and-match (v0.3)                                                                   |
+|--------------------------+-------------------------------------------------------------------------+--------------------------------------------------+--------------------------------------------------------------------------------------------------|
+| Property definition      | Single committed TOML fixture in =data/properties/=                     | Same fixture + live calibration overrides        | User-authored via UI; stored in SQLite; exportable as TOML                                       |
+| Hardware choice          | Hardcoded to the 3702 setup (OpenSprinkler OS-Pi, Ecowitt, etc.)        | Same as v0.1                                     | Selected from a catalog of supported hardware; recommendation engine proposes an initial picklist |
+| Controller               | =SimulatedController= impl of the =Controller= trait                    | =OpenSprinklerController= speaking HTTP to OS-Pi | Any compatible =Controller= impl; the catalog declares which are supported                       |
+| Sensors                  | =SimulatedSensorSource= derived from the physics model                  | =EcowittSensorSource= receiving HTTP pushes      | Any compatible =SensorSource= impl; planner scores properties on sensor coverage                 |
+| Weather                  | Portland climatology + seeded stochastic rain events                    | =EcowittWeatherSource= (WS90 readings)           | User picks climatology by lat/long; real station optional                                        |
+| Soil moisture            | ODE: irrigation inflow − ET − drainage                                  | Measured, fed through the same downstream pipeline | Per-zone soil parameters from the property spec; simulator still validates the plan              |
+| Time                     | =SimClock= advanced in discrete steps, deterministic                    | Wall-clock via =chrono::Utc::now=                | Mixed — planner runs simulator over a proposed design before committing                          |
+| Wiring between stages    | Runtime config flag =hardware_mode= = =simulated= \vert =real= \vert =planning= | Same flag set to =real=                     | Same flag set to =planning=                                                                      |
+
+Every piece of application logic — schedules, alerting, UI, history,
+recommendations — is written against the traits, not against either
+driver.  The switch between simulation, reality, and planning is a
+single config value plus (for planning) a property picker in the UI.
+
+* Template compliance requirements we must honor
+
+These are imposed by the rust-template scaffold and [[file:CLAUDE.md][CLAUDE.md]].  Every
+phase below assumes them.
+
+- Workspace layout: add modules under =crates/lib=, =crates/cli=,
+  =crates/server=; do not create new top-level crates without need.
+- =main.rs= stays an orchestrator; delegate to sibling modules.
+- Staged configuration: =CliRaw → ConfigFileRaw → Config=.  New
+  knobs land in all three.
+- Errors: semantic variants via =thiserror=, named for /what/ failed
+  (=ScenarioLoadError=, =ZoneOpenError=), never generic.
+- No =anyhow= wrappers that strip context.  No =Option= for fields
+  that are conceptually required — use candidate types and validate.
+- Comments: complete sentences, 80 columns, non-obvious intent only.
+- Pascal initialisms (=Url=, =Api=, =Os=), not preserved (=URL=, =API=).
+- Prefer combinators and =tap= over temporary locals; avoid early
+  =return= where a chain reads better.
+- All docs are =.org= (no =.md= unless a tool demands it).
+- All =cargo= commands run inside =nix develop=.  Pre-commit hook in
+  =.cargo-husky= enforces =treefmt= + =cargo test --workspace=.
+- Server infrastructure (healthz, metrics, /me, /scalar, OIDC, systemd
+  socket activation, watchdog) is already provided by the template —
+  reuse it rather than duplicating.
+- License: AGPL-3.0-or-later; lib crate is publish = true (public
+  repo, crates.io workflow emitted).
+- Frontend is Elm, compiled by =elm make= into =frontend/public/elm.js=.
+  No JS framework, no Tailwind.  Styling is hand-written CSS.
+
+* Tooling we will lean on
+
+| Tool                          | Why                                                                    |
+|-------------------------------+------------------------------------------------------------------------|
+| =just=                        | Single entry point for build/test/run — already set up in =justfile=   |
+| =sqlx= + =sqlx-cli=           | Compile-time-checked SQL, migrations; add to =workspace.dependencies=  |
+| =cargo-nextest= (optional)    | Parallel, faster tests during rapid iteration                          |
+| =cargo-watch= (optional)      | =cargo watch -x 'test -p automation-simulator-lib'= while hacking      |
+| =insta=                       | Snapshot tests for simulation time series and OpenAPI schema stability |
+| =proptest=                    | Property-based tests for the soil-moisture model and scheduler         |
+| =treefmt=                     | Already in the dev shell; enforced pre-commit                          |
+| =jq=, =httpie= / =curl=       | Hitting the API by hand from the terminal during dev                   |
+| =elm-test= (optional)         | Elm unit tests for decoders and pure update functions                  |
+| =elm-format=                  | Already in the dev shell; enforced via treefmt                         |
+| =changelog-roller=            | CHANGELOG.org maintenance (template already wires this via flake.nix)  |
+
+New Rust dev-dependencies land in =[workspace.dependencies]= in the
+root =Cargo.toml=; crates opt in by listing them in their own
+=Cargo.toml=.
+
+* Repository layout we are moving toward
+
+The rust-template already emitted the workspace structure.  New paths
+added by this plan are marked =(new)=.
+
+- =crates/lib/src/sim/= =(new)= — simulation engine: property model,
+  physics, scheduler, scenarios.  Pure Rust, no I/O.
+- =crates/lib/src/catalog/= =(new)= — hardware + species catalog model
+  and loader.  Catalog /data/ lives in =data/catalog/=.
+- =crates/lib/src/db/= =(new)= — sqlx models + migrations.
+- =crates/lib/src/api_types.rs= =(new)= — serde + schemars types shared
+  by server and (decoded in) Elm.
+- =crates/lib/src/hw/= =(new)= — =Controller= and =SensorSource= traits
+  + the =Simulated*= implementations.  v0.2 adds =OpenSprinkler*= /
+  =Ecowitt*= impls alongside.
+- =crates/lib/src/planner/= =(new, v0.3)= — property requirements,
+  candidate-plan scoring, recommendation engine.
+- =crates/server/src/routes/= =(new)= — feature modules registered in
+  =create_app=: =sim.rs=, =zones.rs=, =sensors.rs=, =plants.rs=,
+  =ingest.rs=, =weather.rs=, =schedule.rs=, =history.rs=,
+  =planner.rs= =(v0.3)=.
+- =crates/cli/src/commands/= =(new)= — =seed=, =scenario=, =step=,
+  =dump=, =plan= =(v0.3)= subcommands.
+- =frontend/src/Page/=, =frontend/src/Widget/=, =frontend/src/Api.elm=
+  =(new)= — Elm modules.  =Page/Properties=, =Page/Designer=,
+  =Page/PlanDetail= arrive in v0.3.
+- =data/properties/3702-n-arlington.toml= =(new)= — seed property
+  fixture.  Additional fixtures land here over time.
+- =data/catalog/*.toml= =(new)= — hardware and species catalog rows.
+- =data/scenarios/*.toml= =(new)= — reusable scenarios (July heatwave,
+  October transition, winter shutdown).
+- =migrations/= =(new)= — sqlx migrations at repo root.
+- =docs/property-schema.org= =(new)= — the property TOML schema that
+  both v0.1 fixtures and v0.3 user-authored properties conform to.
+
+* Verification strategy
+
+Every phase below ends with a /verification/ list that must pass before
+the phase is considered done.  The common recipe for each phase:
+
+#+begin_src sh :exports code
+nix develop --command just build
+nix develop --command just test
+#+end_src
+
+Phase-specific checks add on top (integration tests, human UI
+inspection, sample scenarios).
+
+* Phase 0 — Baseline sanity and version control
+
+Goal: confirm the scaffolded project still builds and tests clean
+after the post-generation metadata edits, and record the baseline in
+git.
+
+** Steps
+
+1. =nix develop --command just build= exits 0.
+2. =nix develop --command just test= exits 0; all 16 scaffolded tests
+   pass.
+3. Run the server against the scaffolded config to confirm the stack
+   comes up:
+   #+begin_src sh :exports code
+   nix develop --command just run -- \
+     --base-url http://localhost:3000 \
+     --frontend-path frontend/public
+   #+end_src
+   =curl http://localhost:3000/healthz= returns ={"status":"healthy"}=.
+   =curl http://localhost:3000/scalar= serves the Scalar API UI.
+4. =git init && git add . && git commit -m "Initial commit"=.
+5. Push to =github.com/ericrinman/automation-simulator= (private or
+   public — decide before first push).  Configure the three GitHub
+   requirements from the template README (CARGO_REGISTRY_TOKEN, branch
+   protection, auto-merge).
+
+** Verification
+
+- Green build, green tests, green smoke request.  Commit SHA recorded.
+
+** Human checkpoint
+
+- None.  Fully autonomous.
+
+* Phase 1 — Workspace dependencies for the simulator
+
+Goal: pull in the crates we know we need before writing domain code,
+and wire them into =workspace.dependencies= + each crate's
+=Cargo.toml=.  Keep the tree compiling.
+
+** Steps
+
+1. Add to =[workspace.dependencies]= in the root =Cargo.toml=:
+   =sqlx= (features: =runtime-tokio=, =sqlite=, =macros=, =migrate=,
+   =chrono=, =uuid=); =chrono= (with =serde=); =uuid= (with =serde=,
+   =v4=); =rand= + =rand_chacha= (seeded RNG for scenarios); =proptest=
+   (dev-only); =insta= (dev-only).
+2. Add =sqlx-cli= note to =flake.nix= =devPackages= so migrations can
+   be generated inside the dev shell.
+3. Consume the new deps from =crates/lib/Cargo.toml= (primary) and, as
+   needed, from =crates/server/Cargo.toml= and =crates/cli/Cargo.toml=.
+4. Add a trivial use-site per crate so the deps are not stripped: a
+   =#[allow(unused_imports)]= shim in a fresh =placeholder.rs= that we
+   delete at the end of Phase 2.
+5. Verify build + test still clean.
+
+** Verification
+
+- =just build= and =just test= pass.
+- =cargo tree -p automation-simulator-lib | grep sqlx= shows the
+  expected version.
+
+* Phase 2 — Domain model in =crates/lib/src/sim/=
+
+Goal: data types that describe a property, its zones, plants, and
+physical hardware, as pure Rust with no I/O.  Unit-tested invariants.
+/Designed to be catalog-driven from the start/ so v0.3 mix-and-match
+planning is a data-and-UI exercise, not a refactor.
+
+** Steps
+
+1. =property.rs=: =Property= (address, lot-area, spigots, yards,
+   climate-zone); =Yard= (name, square-footage); =Spigot= (id,
+   position, mains-pressure-psi).  Yards are a named collection, not a
+   =Front= / =Back= enum — arbitrary properties may have side yards,
+   courtyards, greenhouses.  Implement =TryFrom<PropertyRaw>= so the
+   TOML loader can produce validated =Property= from untrusted input.
+2. =zone.rs=: =Zone= (id, yard-id, plant-kind, emitter-spec-id,
+   area-sq-ft, soil-type-id, manifold-id).  =plant-kind= is an enum
+   that starts with =VeggieBed= / =Shrub= / =Perennial= / =Tree=
+   (=Tree= explicitly /not irrigated/ for 3702 but supported for other
+   properties).  =emitter-spec-id= and =soil-type-id= reference the
+   catalog so the zone carries an id, not inlined datasheet values.
+   Invariants: every zone belongs to exactly one manifold which
+   belongs to exactly one spigot; =emitter-spec= matches =plant-kind=
+   recommendations (soft-warned, not hard-errored).
+3. =plant.rs=: =Plant= (id, zone-id, species-id, planted-on,
+   water-needs-ml-per-day, notes).  =species-id= references the
+   catalog.
+4. =hardware.rs=: /instance/ types that reference the catalog — each
+   is an id plus placement/wiring data, not a datasheet.  Examples:
+   =ControllerInstance= (id, model-id, position, assigned-zones),
+   =ManifoldInstance= (id, model-id, spigot-id, zone-ids),
+   =SensorInstance= (id, model-id, zone-id, gateway-id), etc.  The
+   datasheet-level constants live in the catalog (Phase 2.5); a
+   property owns instances, never model definitions.
+5. =scenarios.rs=: =Scenario= (seed, start-date, duration, weather
+   overrides, manual interventions).  Deterministic with the RNG seed.
+6. Unit tests per file exercising at least one invariant violation
+   (which must produce a semantic error) and one happy path.
+7. Explicitly test that nothing in the domain model has hard-coded
+   references to "front yard", "back yard", OpenSprinkler-specific
+   terms, or the six zones from 3702.  Those names live in the
+   fixture, not the model.
+
+** Verification
+
+- =cargo test -p automation-simulator-lib sim::= passes.
+- =cargo doc -p automation-simulator-lib --no-deps= produces clean
+  docs (no warnings).
+- =rg -i "front yard\|back yard\|opensprinkler\|ecowitt" crates/lib/src/=
+  returns nothing — brand names appear only in the catalog and
+  fixtures.
+
+* Phase 2.5 — Hardware and plant catalog
+
+Goal: a data-driven catalog of supported hardware models and plant
+species that the domain model references by id.  For v0.1 we seed
+only the models present at 3702 N. Arlington Place, but the catalog
+shape is final so v0.3 adds rows, not columns.
+
+** Steps
+
+1. =crates/lib/src/catalog/= module with one submodule per category:
+   =controllers.rs=, =sensors.rs=, =weather_stations.rs=,
+   =valves.rs=, =manifolds.rs=, =emitters.rs=, =pressure_regulators.rs=,
+   =backflow_preventers.rs=, =drip_lines.rs=, =spray_heads.rs=, =pumps.rs=,
+   =species.rs=, =soil_types.rs=.
+2. Each model struct includes id (stable string), human name,
+   manufacturer, price estimate (USD), physical constants, and a
+   =compatibility= field declaring what it can pair with (e.g. the
+   OS-Pi HAT declares =requires: RaspberryPi=; the WH51 declares
+   =gateway: EcowittGw2000=).
+3. =data/catalog/= directory with one TOML per category containing the
+   seeded rows.  v0.1 seeds exactly the 3702 setup: OS-Pi controller,
+   GW2000 gateway, 6× WH51 sensors, WS90 weather station, Rain Bird
+   HV300 manifolds, Orbit backflow, 25 PSI regulator, Y-filter,
+   1.0 GPH pressure-compensating emitters, 12"-spaced inline drip,
+   micro-spray heads, etc.  Every line item from the docx Section 2
+   shopping list becomes a catalog row.
+4. =crates/lib/src/catalog/mod.rs=: =Catalog::load(dir)= →
+   =Result<Catalog, CatalogLoadError>= that parses every TOML and
+   cross-validates compatibility references (no broken ids).
+5. =ScenarioWorld= / =SimWorld= takes =&Catalog= when it needs
+   datasheet constants; nothing outside the catalog hardcodes them.
+6. Unit tests: a malformed compatibility reference fails loudly; a
+   valid catalog loads; the 3702 fixture resolves every id it names.
+
+** Verification
+
+- =cargo test -p automation-simulator-lib catalog::= passes.
+- Loading =data/catalog/= in an integration test produces a non-empty
+  =Catalog= with every id the 3702 fixture references.
+- Adding a synthetic =controllers/rachio-3.toml= row does /not/ break
+  any tests — the catalog is additive.
+
+** Human checkpoint
+
+- Skim the 3702 catalog entries against the docx Section 2 shopping
+  list.  Every listed model should have a row; every row should
+  match the docx price to within 10%.
+
+* Phase 3 — Simulation engine core
+
+Goal: a deterministic =tick= function that evolves the world forward
+by a configurable number of simulated minutes, and the =SimClock=
+that drives it.
+
+** Steps
+
+1. =clock.rs=: =SimClock= (start-instant, now, step).  All code below
+   takes =&SimClock= or =SimInstant= rather than =chrono::Utc::now()=.
+2. =weather.rs=: =WeatherModel= producing temperature, humidity, wind,
+   solar radiation, precipitation for a given =SimInstant=.  Seeded
+   Portland climatology: monthly normals from NOAA, with stochastic
+   rain events sampled from a seeded =ChaCha8Rng=.
+3. =soil.rs=: per-zone soil-moisture ODE.  =d(theta)/dt = I − ET − D=
+   where =I= is irrigation inflow (computed from valve state and
+   emitter spec), =ET= is Penman-Monteith evapotranspiration (pulled
+   from =WeatherModel=), =D= is deep drainage (saturated flow past
+   field capacity).  State: volumetric water content per zone, clamped
+   to [0, saturation].
+4. =flow.rs=: when valves are open, compute inflow rate from emitter
+   count × gph × pressure-compensation.  Handle pressure drop across
+   manifold and drip line runs.
+5. =tick.rs=: top-level =SimWorld::advance(duration)= that steps the
+   clock in 1-minute sub-steps, calling weather → flow → soil →
+   recording sensor samples.
+6. Integration test: load a tiny property (1 zone, 1 plant), run a
+   30-day scenario with a fixed schedule, assert soil moisture stays
+   within [0.15, 0.40] v/v the whole time.  Snapshot the time series
+   with =insta=.
+7. Property test: over 1,000 random schedules, no step ever produces
+   NaN, negative moisture, or moisture above saturation.
+
+** Verification
+
+- =cargo nextest run -p automation-simulator-lib= passes.
+- The =insta= snapshot for the reference scenario is stable across
+  three consecutive runs (determinism check).
+
+* Phase 4 — Persistence layer
+
+Goal: a SQLite schema that holds property definitions, sensor readings,
+watering log, plant inventory, and simulation-run history.  Readable
+by both =cli= and =server=.
+
+** Steps
+
+1. Generate migrations with =sqlx migrate add -r init_schema= inside
+   the dev shell.  Tables: =property=, =yard=, =spigot=, =manifold=,
+   =zone=, =plant=, =controller_instance=, =sensor_instance=,
+   =sensor_reading=, =watering_log=, =sim_run=, =sim_event=,
+   =schedule_item=, =property_design= (v0.3 draft state).  The schema
+   supports multiple properties per database from day one (one row in
+   =property= with a stable id; everything else carries
+   =property_id=) even though v0.1 only ever has one row.
+2. =crates/lib/src/db/models.rs=: =sqlx::FromRow= types mirroring the
+   tables.  One file per table, one struct per file.
+3. =crates/lib/src/db/mod.rs=: =Pool= wrapper =SimDb= with
+   =SimDb::connect(path) -> Result<Self, DbOpenError>= and
+   =SimDb::migrate(&self) -> Result<(), MigrationError>=.
+4. Add =sqlx-data.json= generation to the pre-commit flow (=cargo
+   sqlx prepare --workspace=) so offline builds work.
+5. Integration test: open a =:memory:= DB, run migrations, insert
+   one of each record, read it back.
+
+** Verification
+
+- =sqlx migrate run --database-url sqlite://./test.db= applies cleanly.
+- Round-trip test passes.
+- =cargo sqlx prepare --check --workspace= passes in CI.
+
+* Phase 5 — Property seed data for 3702 N. Arlington Place
+
+Goal: a committed fixture that reproduces the property from the docx,
+plus a generic CLI command to load /any/ property TOML into a fresh
+database.  3702 is the first fixture we author, not the only shape the
+loader supports — the TOML schema is the single source of truth for
+both v0.1 seed data and v0.3 user-authored properties.
+
+** Steps
+
+1. Define the property TOML schema in
+   =docs/property-schema.org= — yards, spigots, manifolds, zones,
+   plants, controller-and-sensor instances, all referencing catalog
+   ids from Phase 2.5.  The schema must describe an arbitrary
+   residential property, not just 3702.
+2. =data/properties/3702-n-arlington.toml=: the 3702 setup expressed
+   in that schema.  Two yards, two spigots, 6 zones matching docx
+   Section 3.1, manifolds, emitter choices, sensor/controller
+   instances referencing the Phase 2.5 catalog.
+3. =data/properties/example-townhouse.toml= =(stretch)=: a second
+   fixture describing a smaller single-yard townhouse with a single
+   spigot and 3 zones.  Not used by v0.1 tests but committed so the
+   generic loader is exercised against a second shape.
+4. =crates/lib/src/seed.rs=: TOML → =Property= loader producing a
+   validated object and a stream of sqlx inserts.  Generic: takes a
+   path, not a hardcoded filename.
+5. =crates/cli/src/commands/seed.rs=: =automation-simulator-cli seed
+   --property <path> --db <path>=.  Exits non-zero on any validation
+   error with a diagnostic that names the offending field and the
+   catalog id it failed to resolve.
+6. Integration test: seed 3702 into =:memory:=, query back, assert 6
+   zones and 2 spigots.  Separately, seed the townhouse fixture and
+   assert its different shape — proves the loader is generic.
+
+** Verification
+
+- =nix develop --command automation-simulator-cli seed --property
+  data/properties/3702-n-arlington.toml --db /tmp/test.db= exits 0.
+- Zone count, plant count match the docx.
+- A deliberately malformed TOML (bad catalog id, missing required
+  field, out-of-range value) produces a diagnostic that names the
+  offending field.
+
+** Human checkpoint
+
+- Skim the TOML fixture: does the zone assignment match the
+  homeowner's actual intent?  Adjust before moving on.
+
+* Phase 6 — Hardware traits + simulated drivers
+
+Goal: a single interface for =Controller= (valves) and =SensorSource=
+(moisture + weather) that the server calls, with simulated impls
+backed by the engine from Phase 3.
+
+** Steps
+
+1. =crates/lib/src/hw/controller.rs=: trait =Controller= with async
+   methods =list_zones=, =open_zone(id, duration)=, =close_zone(id)=,
+   =status()=.  Errors: semantic =ZoneOpenError=, =ZoneCloseError=,
+   =ControllerUnreachableError=.
+2. =crates/lib/src/hw/sensor.rs=: trait =SensorSource= with
+   =latest_reading(zone_id)=, =history(zone_id, range)=,
+   =weather_now()=.
+3. =crates/lib/src/hw/simulated.rs=: =SimulatedController= and
+   =SimulatedSensorSource= wrapping =SimWorld=.  Opening a zone
+   mutates =SimWorld= valve state; sensors read directly from
+   =SimWorld=.
+4. Unit tests: opening a zone for 10 simulated minutes raises that
+   zone's soil moisture by the expected delta given emitter count ×
+   GPH.
+
+** Verification
+
+- =cargo test -p automation-simulator-lib hw::= passes.
+
+* Phase 7 — Server routes (simulator-facing)
+
+Goal: expose the simulator to the Elm frontend, with OpenAPI docs
+generated by =aide= so the Scalar UI at =/scalar= stays useful.
+
+** Steps
+
+1. =crates/server/src/routes/sim.rs=: =GET /api/sim/property=, =GET
+   /api/sim/state=, =POST /api/sim/step= (body: minutes), =POST
+   /api/sim/reset=, =POST /api/sim/scenario= (body: named scenario).
+2. =crates/server/src/routes/zones.rs=: =GET /api/zones=, =POST
+   /api/zones/{id}/run=, =POST /api/zones/{id}/stop= — delegated to
+   =Arc<dyn Controller>= held in =AppState=.
+3. =crates/server/src/routes/sensors.rs=: =GET /api/sensors=, =GET
+   /api/sensors/{zone}/history=.
+4. =crates/server/src/routes/plants.rs=: =GET/POST/PATCH/DELETE
+   /api/plants=.
+5. =crates/server/src/routes/ingest.rs=: =POST /ecowitt= (push
+   endpoint, no-op in simulator mode beyond logging).
+6. =crates/server/src/routes/weather.rs=: =GET /weather= serving the
+   OpenSprinkler-compatible format from the simulator's weather model
+   (same format as the real WS90 integration will later produce).
+7. =crates/server/src/routes/schedule.rs= + =history.rs=: schedules
+   + watering history endpoints backed by sqlx.
+8. Extend =AppState= with =Arc<dyn Controller>=, =Arc<dyn
+   SensorSource>=, =SimDb= pool, and mode flag.
+9. Extend =create_app= to mount the new routers.
+10. Integration tests for every endpoint in
+    =crates/server/tests/integration_test.rs= (append, do not replace
+    existing auth tests).  Use =hyper::Body= + =tower::ServiceExt= as
+    the existing tests do.
+
+** Verification
+
+- =cargo test -p automation-simulator-server= passes with at least
+  one assertion per new endpoint.
+- =curl http://localhost:3000/api-docs/openapi.json | jq
+  '.paths | keys'= lists all new routes.
+
+** Human checkpoint
+
+- Browse =/scalar=: the sim endpoints render with accurate schemas.
+
+* Phase 8 — Elm dashboard
+
+Goal: a single-page dashboard that reads the simulator state, renders
+an SVG yard map with color-coded moisture, shows per-zone cards,
+weather, plant inventory, and simulation controls.
+
+** Steps
+
+1. Refactor =frontend/src/Main.elm= to route-and-delegate only.  Move
+   code into =Page/Home.elm=, =Page/Dashboard.elm=, =Page/NotFound.elm=.
+2. =frontend/src/Api.elm=: one =Cmd Msg=-producing function per
+   endpoint plus the matching =Decode.Decoder= and =Encode.Value=
+   builders.  Generated by hand from the =openapi.json= schema — no
+   code generation in v0.1.
+3. =frontend/src/Widget/YardMap.elm=: takes =List Zone= and produces
+   an SVG yard map.  Colors green → yellow → brown → black as
+   moisture drops.  Click a zone to focus its card.
+4. =frontend/src/Widget/ZoneCard.elm=: moisture %, last-watered
+   duration, next scheduled run, =Run 5 min= / =Run 15 min= /
+   =Stop= buttons wired to =POST /api/zones/{id}/run=.
+5. =frontend/src/Widget/Weather.elm=: current temp, humidity, wind,
+   rain from =GET /api/sim/state=.
+6. =frontend/src/Widget/PlantInventory.elm=: per-zone list with
+   add/edit/delete against =/api/plants=.
+7. =frontend/src/Widget/SimControls.elm=: =Step 1 hour=, =Step 1 day=,
+   =Reset=, scenario picker.
+8. =frontend/public/style.css=: earthy palette (deep green for lush,
+   pale yellow for stressed, russet for dry, dark brown for critical);
+   legible body text; mobile layout stacks cards vertically.
+9. =frontend/public/index.html=: already present; adjust =<title>=
+   and add the stylesheet link.
+10. =elm make src/Main.elm --output public/elm.js --optimize= must
+    succeed.  =just build= wraps this; already wired.
+
+** Verification
+
+- Browser load: every widget renders, step / reset drives the state,
+  zone run buttons cause the map to change color over the next few
+  simulated hours.
+- Elm compile is warning-free.
+
+** Human checkpoint
+
+- Look-and-feel review of the dashboard.  Iterate on color, layout,
+  and copy before declaring Phase 8 done.
+
+* Phase 9 — End-to-end scenario and demo script
+
+Goal: a scripted =just demo= target that seeds the fixture, runs a
+20-simulated-day scenario covering a Portland July heatwave, and
+leaves a browser-ready URL for the homeowner.
+
+** Steps
+
+1. =data/scenarios/2026-07-heatwave.toml= — 20-day scenario with a
+   deterministic seed, documented in a sibling =README.org=.
+2. =justfile=: add =demo= recipe that (a) wipes the local DB, (b)
+   seeds the fixture, (c) POSTs =/api/sim/scenario=, (d) POSTs 20
+   daily =/api/sim/step= calls, (e) opens the dashboard URL in a
+   browser.
+3. =crates/server/tests/integration_test.rs=: full scenario
+   regression test that runs the scenario in-process and asserts the
+   final watering log has the expected shape.
+
+** Verification
+
+- =nix develop --command just demo= returns 0 and opens the browser
+  with a pre-populated dashboard.
+
+** Human checkpoint
+
+- Walk through the dashboard state after the scenario.  If the
+  behavior is unrealistic (oversaturation, constant drought, odd
+  scheduling), tune the soil parameters in =data/properties/*.toml=
+  and rerun.  This is the main place where human judgment matters.
+
+* Phase 10 — Release v0.1.0 of the simulator
+
+Goal: tag a clean, reproducible release of the simulator — before
+we touch real hardware /or/ the mix-and-match planner.  Everything
+past this tag is strictly additive: drivers (v0.2), broader catalog
+and planner (v0.3).
+
+** Steps
+
+1. =nix develop --command just test= passes; =treefmt= finds nothing
+   to change.
+2. =changelog-roller= run to fold in-flight notes into CHANGELOG.org.
+3. Bump =[workspace.package].version= in root =Cargo.toml= to
+   =0.1.0=.
+4. Tag =v0.1.0=; GitHub publish workflow does the crates.io upload
+   of =automation-simulator-lib=.
+
+** Verification
+
+- GitHub release page shows the tag.
+- =cargo install --locked automation-simulator-cli= (once the binary
+  is published separately, or from git for now) works on a fresh
+  machine.
+
+* Phase 11 (v0.2) — Real-hardware drivers for the 3702 deployment
+
+Not targeted for v0.1, but the Phase 6 traits are designed with these
+impls in mind so the v0.2 work is additive.
+
+- =OpenSprinklerController=: HTTP client against the OS-Pi at
+  =http://localhost:8080= using its documented JSON API.
+- =EcowittSensorSource= + =EcowittWeatherSource=: receive pushes on
+  =POST /ecowitt=, parse the WH51 / WS90 payloads, store via sqlx.
+  Expose the same trait surface as the simulated impls.
+- Runtime switch via =--hardware-mode real= / config file.
+- Deployment: extend =nix/modules/nixos-server.nix= for Pi-class
+  hosts; write a companion =nix/modules/pi.nix= that declares the
+  OpenSprinkler systemd unit so everything lives in one flake.
+- Success criterion for v0.2: same dashboard as v0.1, but moisture
+  numbers come from physical sensors and zone runs actually open real
+  valves at 3702 N. Arlington Place.
+
+* Phase 12 (v0.3) — Catalog breadth
+
+Goal: grow the Phase 2.5 catalog from "just what 3702 uses" to a
+meaningful picklist for other Portland-area food-forest properties.
+No application code changes — this is TOML data + lightweight
+validators.
+
+** Steps
+
+1. Add controller rows for: Rachio 3 / 3e (Wi-Fi), Hunter Pro-C
+   (12-zone), Orbit B-hyve, Rain Bird ESP-Me, generic 24VAC-sink
+   controller.  Each declares its zone count, schedule-API
+   capability, and required companion hardware.
+2. Add sensor rows for: Rachio Wireless Flow Meter, Davis Vantage Vue
+   (weather), generic resistive probe (for user-sourced sensors), and
+   the existing Ecowitt line.
+3. Add manifold / valve rows for common Rain Bird, Orbit, and Hunter
+   SKUs.  Add emitter rows for Netafim and Dramm in addition to the
+   existing generic 1.0 GPH entries.
+4. Extend catalog compatibility rules: a =ControllerInstance= with
+   =zones.len() > model.max_zones= fails validation; a sensor without
+   a declared gateway fails validation; mains-pressure below a
+   pressure-regulator's minimum-inlet fails validation.
+5. Snapshot tests (=insta=) for the full catalog — adds confidence
+   that new rows don't mutate existing behavior.
+
+** Verification
+
+- Loading the expanded catalog in a test adds rows without breaking
+  existing fixtures.
+- A malformed compatibility rule (e.g. OS-Pi on a non-Pi host)
+  produces a clear =CatalogValidationError=.
+
+* Phase 13 (v0.3) — Property designer and BOM planner
+
+Goal: the user inputs property dimensions, garden layout, and
+preferences, and the app returns a costed bill of materials plus a
+runnable simulation of the proposed design.
+
+** Steps
+
+1. =crates/lib/src/planner/= module.
+   - =requirements.rs=: =PropertyRequirements= (yards, planting
+     intents per area, watering budget, smart-vs-dumb preference,
+     budget cap, compatibility overrides).
+   - =plan.rs=: =PropertyPlan= = =Property= + =Bom= + =Rationale=.
+     Derived deterministically from =PropertyRequirements= + =Catalog=.
+   - =scoring.rs=: scoring rules for candidate plans — coverage, cost,
+     smart-features, future-expandability, simplicity.  Pure functions
+     exposed for tests.
+   - =recommend.rs=: =recommend(requirements, catalog) -> Vec<PropertyPlan>=
+     returning the top-N candidates ordered by score.
+2. =crates/server/src/routes/planner.rs=: =POST /api/plan= (body:
+   requirements, response: top candidates); =POST /api/plan/{id}/simulate=
+   (forks a =SimWorld= from the candidate and runs the standard
+   v0.1 scenario against it); =POST /api/plan/{id}/commit= (turns
+   the candidate into a persisted =property_design= row the user can
+   iterate on).
+3. =crates/cli/src/commands/plan.rs=: headless CLI that accepts a
+   requirements TOML and prints the top-N plans as TOML — useful for
+   CI and for power users.
+4. Deterministic tests: fixed requirements → fixed top plan across
+   runs.  =insta= snapshots guard the output.
+
+** Verification
+
+- =POST /api/plan= returns a non-empty list of plans for a
+  minimal-requirements payload.
+- Running the returned plan through =POST /api/plan/{id}/simulate=
+  produces a completing simulation with soil moisture inside the same
+  sanity bounds as Phase 3.
+- CLI end-to-end: =automation-simulator-cli plan
+  --requirements data/requirements/example.toml= prints deterministic
+  output.
+
+** Human checkpoint
+
+- Review a handful of plan outputs against common-sense expectations.
+  If the planner recommends obviously wrong pairings (e.g. OS-Pi
+  without a Pi host), add a catalog compatibility rule rather than
+  tweaking the scorer.
+
+* Phase 14 (v0.3) — Multi-property UI and property designer frontend
+
+Goal: the Elm frontend gains a property list, a designer view, and a
+plan-comparison view.  The existing v0.1 dashboard becomes one of
+several per-property pages.
+
+** Steps
+
+1. =frontend/src/Page/Properties.elm=: list of stored properties with
+   =New= / =Open= / =Delete= actions.
+2. =frontend/src/Page/Designer.elm=: form-driven property requirements
+   editor (yards, zones, watering intent, budget).  Submits to
+   =POST /api/plan= and renders the returned candidates in a
+   comparison table.
+3. =frontend/src/Page/PlanDetail.elm=: per-candidate page showing the
+   SVG layout, BOM with prices, rationale, and a /Simulate this plan/
+   button that re-uses the v0.1 dashboard pointed at the candidate.
+4. =frontend/src/Widget/Bom.elm=: bill-of-materials table with totals.
+5. Navigation: routing extended to
+   =/properties=, =/properties/:id=, =/properties/:id/design=,
+   =/plans/:id=.
+6. Style updates to keep the earthy palette coherent across the
+   new pages; no Tailwind or CSS framework.
+
+** Verification
+
+- Create a new property from the UI, generate plans, simulate one,
+  persist it, and revisit it in a fresh browser session.
+- Elm compile stays warning-free; existing v0.1 dashboard continues
+  to work pointed at the 3702 property.
+
+** Human checkpoint
+
+- End-to-end walk-through: "I own a different Portland property, I
+  want to simulate what irrigation gear I should buy."  Does the flow
+  answer that question?
+
+* Risks and mitigations
+
+| Risk                                               | Mitigation                                                                                                                   |
+|----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------|
+| Soil-moisture physics is subtly wrong              | Snapshot tests + explicit bounds assertions per scenario; document all constants; bias toward over-watering in uncertainty. |
+| Elm HTTP wiring gets tedious without codegen       | Accept the boilerplate for v0.1; reconsider generators only if we add ≥3 more resource types after launch.                  |
+| sqlx offline prepare drifts                        | Pre-commit hook runs =cargo sqlx prepare --check=; CI fails loudly on drift.                                                 |
+| Changing trait shapes late breaks both drivers     | Design Phase 6 traits with the real drivers in mind from day one; review the trait file against the docx Section 7.3.       |
+| Scope creep into the real-hardware path            | Phase 11 is explicitly deferred.  Do not start it until Phase 10 is tagged.                                                  |
+| Elm/Rust type duplication for API payloads         | Single source of truth lives in =crates/lib/src/api_types.rs=; Elm decoders hand-written once, reviewed against openapi.json. |
+| Catalog grows faster than tests can cover          | Phase 12 catalog additions must come with at least one compatibility test; CI fails on an unchecked row.                     |
+| Planner produces nonsense recommendations          | Scorer rules live in pure functions with =insta= snapshots on fixed inputs; catalog rules (Phase 12) reject hard errors.     |
+| v0.3 designer UI drifts from v0.1 dashboard        | Both consume the same =Api.elm= module; the /Simulate this plan/ button reuses the v0.1 dashboard pointed at a different id. |
+
+* Open questions to resolve during Phase 2
+
+These are assumptions we are making now and will confirm or correct
+once we have the domain model in hand.
+
+1. How many plants per zone are worth seeding?  Default assumption:
+   3–5 representative plants per zone, not a full inventory — the
+   homeowner fills the rest in through the UI.
+2. Which soil type should the fixture use?  Default assumption: silty
+   clay loam, the most common Portland residential soil per Oregon
+   State Extension, applied uniformly; zone-level overrides allowed.
+3. What are the mains-pressure numbers at 3702 N. Arlington Place?
+   Default assumption: 60 psi, which is the Portland Water Bureau
+   typical; the pressure regulators downstream normalize to 25 psi so
+   the exact mains figure has minor effect on the simulation.
+4. Does the homeowner want OIDC auth on v0.1?  Default assumption:
+   no — v0.1 runs with =base_url= set and no OIDC configured.  The
+   template's OIDC scaffolding stays in place for the real
+   deployment.
+
+* Out of scope for v0.1
+
+- Mobile native apps.  Browser only.
+- Alerting (email, SMS, push).
+- Real-hardware drivers — deferred to v0.2 (Phase 11).
+- Multi-property UI and mix-and-match planning — deferred to v0.3
+  (Phases 12–14).  The schema and catalog already support it; v0.1
+  simply does not expose the corresponding UI or API routes.
+- Machine-learning-driven scheduling.  We stick to deterministic
+  rules.
+- Historical weather import from NOAA live API.  Use built-in
+  climatology only.
