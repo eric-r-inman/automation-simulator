@@ -57,7 +57,7 @@ aide = { version = "0.15", features = ["axum", "axum-json", "axum-query", "scala
 schemars = "0.9"
 
 # Authentication
-openidconnect = { version = "3", features = ["reqwest"] }
+openidconnect = { version = "4", features = ["reqwest"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
 tower-sessions = { version = "0.15", features = ["memory-store"] }
 
