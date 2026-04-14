@@ -3,6 +3,26 @@
 
 * Upcoming
 
+- Wire the simulator into the Axum server.  =web_base::AppState=
+  now also owns =SharedWorld=, =Arc<dyn Controller>=,
+  =Arc<dyn SensorSource>=, =Arc<Catalog>=, and =Arc<PropertyBundle>=,
+  built at startup by loading the catalog and property fixture from
+  config-driven paths.  Adds five new route modules under
+  =crates/server/src/routes/=:
+  - =sim.rs= — =GET /api/sim/property=, =GET /api/sim/state=,
+    =POST /api/sim/step=, =POST /api/sim/reset=
+  - =zones.rs= — =GET /api/zones=, =POST /api/zones/{id}/run=,
+    =POST /api/zones/{id}/stop= (delegates to =Controller=)
+  - =sensors.rs= — =GET /api/sensors=, =GET /api/sensors/{id}/history=
+    (delegates to =SensorSource=)
+  - =weather.rs= — =GET /api/weather= (delegates to
+    =SensorSource::weather_now=)
+  Each route registers as an =aide::ApiRouter= so the schemas
+  surface in the existing =/scalar= UI.  =ApiError= maps controller
+  / sensor errors into the right HTTP status with a typed JSON
+  body (=kind=: zone-not-found / bad-request / upstream-unreachable
+  / internal-error).  Server config gains required =--property-path=
+  and optional =--catalog-path= flags.
 - Add the hardware-abstraction traits under =crates/lib/src/hw/=:
   =Controller= (open_zone / close_zone / list_zones / status) and
   =SensorSource= (latest_reading / history / weather_now).  Both

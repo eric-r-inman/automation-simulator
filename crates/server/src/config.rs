@@ -73,6 +73,17 @@ pub struct CliRaw {
   /// Path to a file containing the OIDC client secret
   #[arg(long, env = "OIDC_CLIENT_SECRET_FILE")]
   pub oidc_client_secret_file: Option<PathBuf>,
+
+  /// Path to the property fixture TOML to load on startup.  The
+  /// server does not run without one in v0.1; the simulator
+  /// initializes against this property's zones and catalog refs.
+  #[arg(long, env = "PROPERTY_PATH")]
+  pub property_path: Option<PathBuf>,
+
+  /// Directory holding the hardware + species catalog TOML files.
+  /// Defaults to `data/catalog` relative to the server's cwd.
+  #[arg(long, env = "CATALOG_PATH")]
+  pub catalog_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -85,6 +96,8 @@ pub struct ConfigFileRaw {
   pub oidc_issuer: Option<String>,
   pub oidc_client_id: Option<String>,
   pub oidc_client_secret_file: Option<PathBuf>,
+  pub property_path: Option<PathBuf>,
+  pub catalog_path: Option<PathBuf>,
 }
 
 impl ConfigFileRaw {
@@ -121,6 +134,8 @@ pub struct Config {
   pub frontend_path: PathBuf,
   pub base_url: String,
   pub oidc: Option<OidcConfig>,
+  pub property_path: PathBuf,
+  pub catalog_path: PathBuf,
 }
 
 impl Config {
@@ -235,6 +250,22 @@ impl Config {
       }
     };
 
+    let property_path = cli
+      .property_path
+      .or(config_file.property_path)
+      .ok_or_else(|| {
+        ConfigError::Validation(
+          "property_path is required: set --property-path or \
+           PROPERTY_PATH pointing at a property TOML fixture"
+            .to_string(),
+        )
+      })?;
+
+    let catalog_path = cli
+      .catalog_path
+      .or(config_file.catalog_path)
+      .unwrap_or_else(|| PathBuf::from("data/catalog"));
+
     Ok(Config {
       log_level,
       log_format,
@@ -242,6 +273,8 @@ impl Config {
       frontend_path,
       base_url,
       oidc,
+      property_path,
+      catalog_path,
     })
   }
 }

@@ -4,6 +4,15 @@ use aide::{
   scalar::Scalar,
   transform::TransformOperation,
 };
+use automation_simulator_lib::{
+  catalog::{Catalog, CatalogLoadError},
+  engine::SimWorld,
+  hw::{
+    Controller, SensorSource, SharedWorld, SimulatedController,
+    SimulatedSensorSource,
+  },
+  seed::{load_property, PropertyBundle, SeedError},
+};
 use axum::{
   http::{header, HeaderValue, StatusCode},
   response::{IntoResponse, Response},
@@ -34,6 +43,27 @@ pub struct AppState {
   pub request_counter: IntCounter,
   pub frontend_path: PathBuf,
   pub oidc_client: Option<Arc<CoreClient>>,
+  /// Shared reference to the simulator world.  Routes that need to
+  /// read *or* mutate state beyond what the trait surface exposes
+  /// (e.g. `POST /api/sim/step` advances the clock, which is a
+  /// simulator-only concept) hold `SharedWorld` directly.
+  pub world: SharedWorld,
+  /// Controller trait object.  Routes under `/api/zones/*` talk to
+  /// this so a future `OpenSprinklerController` drops in without
+  /// touching them.
+  pub controller: Arc<dyn Controller>,
+  /// Sensor-source trait object.  Routes under `/api/sensors/*`
+  /// and `/api/weather` use this.
+  pub sensors: Arc<dyn SensorSource>,
+  /// The catalog that backed the world.  Served as JSON at
+  /// `/api/catalog` in v0.3 so the Designer UI knows what hardware
+  /// is available; kept here so each request does not re-parse the
+  /// TOML.
+  pub catalog: Arc<Catalog>,
+  /// Validated property bundle loaded at startup.  Served as JSON at
+  /// `/api/sim/property` and used by routes that need to answer
+  /// "what does this property look like?"  without hitting SimWorld.
+  pub property: Arc<PropertyBundle>,
 }
 
 #[derive(Debug, Error)]
@@ -46,6 +76,23 @@ pub enum AppStateError {
 
   #[error("Invalid OIDC redirect URI: {0}")]
   InvalidRedirectUri(String),
+
+  #[error("failed to load hardware + species catalog from {path:?}: {source}")]
+  CatalogLoad {
+    path: PathBuf,
+    #[source]
+    source: CatalogLoadError,
+  },
+
+  #[error("failed to load property fixture from {path:?}: {source}")]
+  PropertyLoad {
+    path: PathBuf,
+    #[source]
+    source: SeedError,
+  },
+
+  #[error("failed to build the simulated world from the property: {0}")]
+  WorldBuild(String),
 }
 
 impl AppState {
@@ -105,11 +152,67 @@ impl AppState {
       }
     };
 
+    // Simulator boot: load catalog, load property fixture, validate
+    // against the catalog, build SimWorld + the Simulated* impls.
+    // Any failure here stops the server from starting — we prefer a
+    // loud startup error over serving a broken /api/sim/* route.
+    let catalog = Catalog::load(&config.catalog_path).map_err(|source| {
+      AppStateError::CatalogLoad {
+        path: config.catalog_path.clone(),
+        source,
+      }
+    })?;
+    let catalog = Arc::new(catalog);
+
+    let bundle =
+      load_property(&config.property_path, &catalog).map_err(|source| {
+        AppStateError::PropertyLoad {
+          path: config.property_path.clone(),
+          source,
+        }
+      })?;
+
+    info!(
+      property_id = %bundle.property.id,
+      zones = bundle.zones.len(),
+      plants = bundle.plants.len(),
+      "Property fixture loaded"
+    );
+
+    // Rebuild the world's zones vector from the validated bundle so
+    // `SimWorld` sees them in the fixture's stable order.
+    let zones = bundle.zones.clone();
+    let sim_world = SimWorld::new(
+      // TODO: scenario start-date and seed will become CLI/config
+      // inputs in Phase 9; for now hard-code a sensible default that
+      // puts the simulator in mid-summer Portland so the dashboard
+      // shows interesting weather out of the box.
+      chrono::NaiveDate::from_ymd_opt(2026, 7, 1).expect("valid date"),
+      &bundle.property.climate_zone,
+      zones,
+      Arc::clone(&catalog),
+      1,
+      0.30,
+      Vec::new(),
+    )
+    .map_err(|e| AppStateError::WorldBuild(e.to_string()))?;
+
+    let world = SharedWorld::new(sim_world);
+    let controller: Arc<dyn Controller> =
+      Arc::new(SimulatedController::new(world.clone()));
+    let sensors: Arc<dyn SensorSource> =
+      Arc::new(SimulatedSensorSource::new(world.clone()));
+
     Ok(Self {
       registry: Arc::new(registry),
       request_counter,
       frontend_path: config.frontend_path.clone(),
       oidc_client,
+      world,
+      controller,
+      sensors,
+      catalog,
+      property: Arc::new(bundle),
     })
   }
 }

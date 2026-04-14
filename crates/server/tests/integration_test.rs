@@ -1,9 +1,19 @@
+use automation_simulator_lib::{
+  catalog::Catalog,
+  engine::SimWorld,
+  hw::{
+    Controller, SensorSource, SharedWorld, SimulatedController,
+    SimulatedSensorSource,
+  },
+  seed::load_property,
+};
 use automation_simulator_server::web_base::{base_router, AppState};
 use axum::{
   body::Body,
   http::{Request, StatusCode},
   Router,
 };
+use chrono::NaiveDate;
 use openidconnect::{
   core::{
     CoreClient, CoreJwsSigningAlgorithm, CoreProviderMetadata,
@@ -17,6 +27,60 @@ use std::{path::PathBuf, sync::Arc};
 use tower::ServiceExt;
 use tower_sessions::{cookie::SameSite, MemoryStore, SessionManagerLayer};
 
+// ── shared fixture loader ────────────────────────────────────────────────────
+
+fn workspace_root() -> PathBuf {
+  PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    .parent()
+    .unwrap()
+    .parent()
+    .unwrap()
+    .to_path_buf()
+}
+
+fn property_fixture_path() -> PathBuf {
+  workspace_root()
+    .join("data")
+    .join("properties")
+    .join("example-property.toml")
+}
+
+fn catalog_dir() -> PathBuf {
+  workspace_root().join("data").join("catalog")
+}
+
+/// Build the simulator pieces that every AppState test needs.  Uses
+/// the real example-property fixture + catalog so the routes have a
+/// realistic graph to operate on.
+fn build_sim_pieces() -> (
+  SharedWorld,
+  Arc<dyn Controller>,
+  Arc<dyn SensorSource>,
+  Arc<Catalog>,
+  Arc<automation_simulator_lib::seed::PropertyBundle>,
+) {
+  let catalog = Arc::new(Catalog::load(catalog_dir()).expect("catalog"));
+  let bundle =
+    load_property(property_fixture_path(), &catalog).expect("bundle");
+  let zones = bundle.zones.clone();
+  let world = SimWorld::new(
+    NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+    &bundle.property.climate_zone,
+    zones,
+    Arc::clone(&catalog),
+    1,
+    0.30,
+    Vec::new(),
+  )
+  .expect("sim world");
+  let shared = SharedWorld::new(world);
+  let controller: Arc<dyn Controller> =
+    Arc::new(SimulatedController::new(shared.clone()));
+  let sensors: Arc<dyn SensorSource> =
+    Arc::new(SimulatedSensorSource::new(shared.clone()));
+  (shared, controller, sensors, catalog, Arc::new(bundle))
+}
+
 // ── state helpers ────────────────────────────────────────────────────────────
 
 fn stub_state_no_auth(frontend_path: PathBuf) -> AppState {
@@ -28,11 +92,18 @@ fn stub_state_no_auth(frontend_path: PathBuf) -> AppState {
     .register(Box::new(request_counter.clone()))
     .expect("counter registration");
 
+  let (world, controller, sensors, catalog, property) = build_sim_pieces();
+
   AppState {
     registry: Arc::new(registry),
     request_counter,
     frontend_path,
     oidc_client: None,
+    world,
+    controller,
+    sensors,
+    catalog,
+    property,
   }
 }
 
@@ -61,11 +132,18 @@ fn stub_state_with_auth(frontend_path: PathBuf) -> AppState {
     None,
   );
 
+  let (world, controller, sensors, catalog, property) = build_sim_pieces();
+
   AppState {
     registry: Arc::new(registry),
     request_counter,
     frontend_path,
     oidc_client: Some(Arc::new(oidc_client)),
+    world,
+    controller,
+    sensors,
+    catalog,
+    property,
   }
 }
 
@@ -91,6 +169,21 @@ fn app_with_session(state: AppState) -> Router {
     .with_state(state.clone());
 
   base_router(state).merge(auth_router).layer(session_layer)
+}
+
+/// Mounts the simulator route modules on top of `base_router`,
+/// matching `main::create_app`'s composition.  Tests use this to
+/// hit `/api/sim/*`, `/api/zones`, `/api/sensors`, `/api/weather`.
+fn app_with_sim_routes(state: AppState) -> Router {
+  use automation_simulator_server::routes;
+  let sim_routes: Router = Router::<()>::from(
+    routes::sim::router()
+      .merge(routes::zones::router())
+      .merge(routes::sensors::router())
+      .merge(routes::weather::router())
+      .with_state(state.clone()),
+  );
+  base_router(state).merge(sim_routes)
 }
 
 // ── existing route tests ─────────────────────────────────────────────────────
@@ -347,10 +440,14 @@ async fn test_config_no_oidc() {
     oidc_issuer: None,
     oidc_client_id: None,
     oidc_client_secret_file: None,
+    property_path: Some(property_fixture_path()),
+    catalog_path: Some(catalog_dir()),
   };
 
-  let config = Config::from_cli_and_file(cli).unwrap();
+  let config = Config::from_cli_and_file(cli).expect("config");
   assert!(config.oidc.is_none());
+  assert_eq!(config.property_path, property_fixture_path());
+  assert_eq!(config.catalog_path, catalog_dir());
 }
 
 #[tokio::test]
@@ -370,6 +467,8 @@ async fn test_config_full_oidc() {
     oidc_issuer: Some("https://sso.example.com".to_string()),
     oidc_client_id: Some("my-client".to_string()),
     oidc_client_secret_file: Some(fixture),
+    property_path: Some(property_fixture_path()),
+    catalog_path: Some(catalog_dir()),
   };
 
   let config = Config::from_cli_and_file(cli).unwrap();
@@ -393,6 +492,8 @@ async fn test_config_partial_oidc_errors() {
     oidc_issuer: Some("https://sso.example.com".to_string()),
     oidc_client_id: None,
     oidc_client_secret_file: None,
+    property_path: Some(property_fixture_path()),
+    catalog_path: Some(catalog_dir()),
   };
 
   let err = Config::from_cli_and_file(cli).unwrap_err();
@@ -401,4 +502,220 @@ async fn test_config_partial_oidc_errors() {
     msg.contains("partial OIDC") && msg.contains("missing"),
     "error should describe partial OIDC config, got: {msg}"
   );
+}
+
+// ── simulator route tests ────────────────────────────────────────────────────
+
+async fn json_get(app: &Router, uri: &str) -> serde_json::Value {
+  let response = app
+    .clone()
+    .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+    .await
+    .expect("request");
+  assert_eq!(response.status(), StatusCode::OK, "GET {uri} should be 200");
+  let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+    .await
+    .expect("body");
+  serde_json::from_slice(&body).expect("json")
+}
+
+async fn json_post(
+  app: &Router,
+  uri: &str,
+  body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+  let response = app
+    .clone()
+    .oneshot(
+      Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap(),
+    )
+    .await
+    .expect("request");
+  let status = response.status();
+  let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+    .await
+    .expect("body");
+  let value = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+  (status, value)
+}
+
+#[tokio::test]
+async fn test_get_property_returns_loaded_fixture() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let body = json_get(&app, "/api/sim/property").await;
+  assert_eq!(body["id"], "example-property");
+  assert_eq!(body["climate_zone"], "portland-or");
+  assert_eq!(body["yards"].as_array().unwrap().len(), 2);
+  assert_eq!(body["spigots"].as_array().unwrap().len(), 2);
+  assert_eq!(body["zones"].as_array().unwrap().len(), 6);
+}
+
+#[tokio::test]
+async fn test_get_state_returns_zones_and_weather() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let body = json_get(&app, "/api/sim/state").await;
+  assert_eq!(body["simulated_minutes_elapsed"], 0);
+  assert_eq!(body["zones"].as_array().unwrap().len(), 6);
+  let first = &body["zones"][0];
+  assert!(first["soil_vwc"].as_f64().unwrap() > 0.0);
+  assert_eq!(first["valve_is_open"], false);
+  // Weather block should carry a plausible July temperature.
+  let temp = body["weather"]["temperature_c"].as_f64().unwrap();
+  assert!((10.0..40.0).contains(&temp));
+}
+
+#[tokio::test]
+async fn test_step_advances_clock() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, body) =
+    json_post(&app, "/api/sim/step", serde_json::json!({ "minutes": 60 }))
+      .await;
+  assert_eq!(status, StatusCode::OK);
+  assert_eq!(body["minutes_advanced"], 60);
+  assert_eq!(body["simulated_minutes_elapsed"], 60);
+}
+
+#[tokio::test]
+async fn test_step_rejects_non_positive_minutes() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, body) =
+    json_post(&app, "/api/sim/step", serde_json::json!({ "minutes": 0 })).await;
+  assert_eq!(status, StatusCode::BAD_REQUEST);
+  assert_eq!(body["kind"], "bad-request");
+}
+
+#[tokio::test]
+async fn test_reset_returns_to_initial_state() {
+  let app = app_with_sim_routes(state_without_frontend());
+  // Advance, then reset, then check elapsed is back to zero.
+  let _ =
+    json_post(&app, "/api/sim/step", serde_json::json!({ "minutes": 120 }))
+      .await;
+  let (status, _) =
+    json_post(&app, "/api/sim/reset", serde_json::json!({})).await;
+  assert_eq!(status, StatusCode::OK);
+  let body = json_get(&app, "/api/sim/state").await;
+  assert_eq!(body["simulated_minutes_elapsed"], 0);
+}
+
+#[tokio::test]
+async fn test_list_zones_returns_six_zones() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let body = json_get(&app, "/api/zones").await;
+  let zones = body["zones"].as_array().unwrap();
+  assert_eq!(zones.len(), 6);
+  for z in zones {
+    assert!(z["zone_id"].is_string());
+    assert_eq!(z["is_open"], false);
+    assert_eq!(z["total_open_seconds"], 0);
+  }
+}
+
+#[tokio::test]
+async fn test_run_zone_then_state_shows_open() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, body) = json_post(
+    &app,
+    "/api/zones/zone-a1-veggies/run",
+    serde_json::json!({ "duration_minutes": 15 }),
+  )
+  .await;
+  assert_eq!(status, StatusCode::OK);
+  assert_eq!(body["opened_for_minutes"], 15);
+  assert_eq!(body["zone_id"], "zone-a1-veggies");
+
+  let zones = json_get(&app, "/api/zones").await;
+  let target = zones["zones"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .find(|z| z["zone_id"] == "zone-a1-veggies")
+    .expect("zone present");
+  assert_eq!(target["is_open"], true);
+}
+
+#[tokio::test]
+async fn test_run_unknown_zone_returns_404() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let (status, body) = json_post(
+    &app,
+    "/api/zones/no-such-zone/run",
+    serde_json::json!({ "duration_minutes": 10 }),
+  )
+  .await;
+  assert_eq!(status, StatusCode::NOT_FOUND);
+  assert_eq!(body["kind"], "zone-not-found");
+}
+
+#[tokio::test]
+async fn test_stop_zone_clears_open_state() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let _ = json_post(
+    &app,
+    "/api/zones/zone-a1-veggies/run",
+    serde_json::json!({ "duration_minutes": 15 }),
+  )
+  .await;
+  let (status, _) =
+    json_post(&app, "/api/zones/zone-a1-veggies/stop", serde_json::json!({}))
+      .await;
+  assert_eq!(status, StatusCode::OK);
+  let zones = json_get(&app, "/api/zones").await;
+  let target = zones["zones"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .find(|z| z["zone_id"] == "zone-a1-veggies")
+    .unwrap();
+  assert_eq!(target["is_open"], false);
+}
+
+#[tokio::test]
+async fn test_sensors_empty_until_advance() {
+  let app = app_with_sim_routes(state_without_frontend());
+  // No sub-steps yet → no recorded readings.
+  let body = json_get(&app, "/api/sensors").await;
+  assert!(body["readings"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn test_sensors_populated_after_step() {
+  let app = app_with_sim_routes(state_without_frontend());
+  // Advance past the recording cadence (60 sim-min default) so each
+  // zone produces at least one sample.
+  let _ =
+    json_post(&app, "/api/sim/step", serde_json::json!({ "minutes": 120 }))
+      .await;
+  let body = json_get(&app, "/api/sensors").await;
+  let readings = body["readings"].as_array().unwrap();
+  assert_eq!(readings.len(), 6);
+  for r in readings {
+    assert_eq!(r["kind"], "soilvwc");
+    assert!(r["value"].as_f64().unwrap() > 0.0);
+  }
+}
+
+#[tokio::test]
+async fn test_zone_history_returns_per_step_samples() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let _ =
+    json_post(&app, "/api/sim/step", serde_json::json!({ "minutes": 240 }))
+      .await;
+  let body = json_get(&app, "/api/sensors/zone-a1-veggies/history").await;
+  let readings = body["readings"].as_array().unwrap();
+  // Default record cadence is 60 sim-min, so 240 minutes ≈ 4 samples.
+  assert!(readings.len() >= 3, "expected ≥3 samples, got {}", readings.len());
+}
+
+#[tokio::test]
+async fn test_weather_endpoint_returns_sample() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let body = json_get(&app, "/api/weather").await;
+  let temp = body["temperature_c"].as_f64().unwrap();
+  assert!((10.0..40.0).contains(&temp));
 }
