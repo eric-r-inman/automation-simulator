@@ -6,7 +6,7 @@ dashboard turns into POST requests.
 -}
 
 import Api
-import Html exposing (Html, button, dd, div, dl, dt, h3, p, span, text)
+import Html exposing (Html, button, dd, div, dl, dt, h3, span, text)
 import Html.Attributes as Attr
 import Html.Events exposing (onClick)
 
@@ -18,6 +18,8 @@ type alias Args msg =
     , onRun : Int -> msg
     , onStop : msg
     , onFocus : msg
+    , onEdit : msg
+    , onDelete : msg
     , isFocused : Bool
     }
 
@@ -98,8 +100,18 @@ view args =
                 ]
                 [ text "Stop" ]
             ]
-        , p [ Attr.class "zone-hint" ]
-            [ text "Tip: advance the simulator clock with the Step controls to see moisture respond." ]
+        , div [ Attr.class "zone-meta-actions" ]
+            [ button
+                [ Attr.class "btn btn-edit"
+                , onClick args.onEdit
+                ]
+                [ text "Edit" ]
+            , button
+                [ Attr.class "btn btn-delete"
+                , onClick args.onDelete
+                ]
+                [ text "Delete" ]
+            ]
         ]
 
 

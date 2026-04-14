@@ -456,3 +456,141 @@ button.btn-refresh {
   padding: 1.5rem;
   margin-top: 1rem;
 }
+
+/* ── Zones header + per-zone meta actions ─────────────────────── */
+
+.zones-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.zones-header h2 {
+  margin: 0;
+}
+
+.zone-meta-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  border-top: 1px dashed var(--color-border);
+  padding-top: 0.6rem;
+}
+
+button.btn-edit {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+button.btn-delete {
+  background: var(--color-surface);
+  color: var(--color-stress);
+  border-color: var(--color-stress);
+}
+
+button.btn-delete:hover:not([disabled]) {
+  background: var(--color-stress);
+  color: var(--color-surface);
+}
+
+/* ── Modal + editor form ──────────────────────────────────────── */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(40, 32, 20, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 4rem 1rem 2rem;
+  z-index: 50;
+  overflow-y: auto;
+}
+
+.modal {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 10px 40px rgba(40, 32, 20, 0.3);
+}
+
+.modal h2 {
+  margin: 0 0 1rem;
+  color: var(--color-text);
+}
+
+.modal-confirm {
+  max-width: 440px;
+}
+
+.zone-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.form-row label {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.form-row input,
+.form-row select,
+.form-row textarea {
+  font: inherit;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.form-row input[disabled] {
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+}
+
+.form-row textarea {
+  min-height: 4em;
+  resize: vertical;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.editor-error {
+  background: var(--color-bg-error);
+  border: 1px solid var(--color-border-error);
+  color: var(--color-error);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 540px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  .form-row label {
+    margin-bottom: 0.15rem;
+  }
+}

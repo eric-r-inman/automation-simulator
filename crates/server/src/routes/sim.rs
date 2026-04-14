@@ -33,7 +33,16 @@ pub struct PropertyResponse {
   pub lot_area_sq_ft: f64,
   pub yards: Vec<YardSummary>,
   pub spigots: Vec<SpigotSummary>,
+  pub manifolds: Vec<ManifoldSummary>,
   pub zones: Vec<ZoneSummary>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct ManifoldSummary {
+  pub id: String,
+  pub model_id: String,
+  pub spigot_id: String,
+  pub zone_capacity: i64,
 }
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -128,6 +137,16 @@ async fn get_property(State(state): State<AppState>) -> Json<PropertyResponse> {
         id: s.id.as_str().to_string(),
         mains_pressure_psi: s.mains_pressure_psi,
         notes: s.notes.clone(),
+      })
+      .collect(),
+    manifolds: bundle
+      .manifolds
+      .iter()
+      .map(|m| ManifoldSummary {
+        id: m.id.as_str().to_string(),
+        model_id: m.model_id.as_str().to_string(),
+        spigot_id: m.spigot_id.as_str().to_string(),
+        zone_capacity: m.zone_capacity,
       })
       .collect(),
     zones: bundle

@@ -15,6 +15,7 @@ import Http
 import Widget.SimControls as SimControls
 import Widget.Weather as Weather
 import Widget.ZoneCard as ZoneCard
+import Widget.ZoneEditor as ZoneEditor
 
 
 
@@ -25,9 +26,12 @@ type alias Model =
     { property : Loadable Api.Property
     , state : Loadable Api.SimState
     , zones : Loadable Api.ZonesResponse
+    , catalog : Loadable Api.Catalog
     , busy : Bool
     , focusedZoneId : Maybe String
     , lastError : Maybe String
+    , editor : Maybe ZoneEditor.Form
+    , confirmDeleteZoneId : Maybe String
     }
 
 
@@ -42,9 +46,12 @@ init =
     ( { property = Loading
       , state = Loading
       , zones = Loading
+      , catalog = Loading
       , busy = False
       , focusedZoneId = Nothing
       , lastError = Nothing
+      , editor = Nothing
+      , confirmDeleteZoneId = Nothing
       }
     , refreshAll
     )
@@ -58,6 +65,7 @@ type Msg
     = GotProperty (Result Http.Error Api.Property)
     | GotState (Result Http.Error Api.SimState)
     | GotZones (Result Http.Error Api.ZonesResponse)
+    | GotCatalog (Result Http.Error Api.Catalog)
     | RefreshClicked
     | StepClicked Int
     | StepResulted (Result Http.Error Api.StepResult)
@@ -68,6 +76,17 @@ type Msg
     | StopZoneClicked String
     | StopZoneResulted (Result Http.Error Api.StopResult)
     | FocusZone String
+    | OpenAddZone
+    | OpenEditZone Api.Zone
+    | EditorMsg ZoneEditor.Msg
+    | EditorSubmit
+    | EditorCancel
+    | ZoneCreated (Result Http.Error Api.ZoneDefinition)
+    | ZoneUpdated (Result Http.Error Api.ZoneDefinition)
+    | RequestDeleteZone String
+    | CancelDelete
+    | ConfirmDeleteZone String
+    | ZoneDeleted (Result Http.Error Api.DeletedResult)
 
 
 
@@ -159,6 +178,152 @@ update msg model =
         FocusZone zoneId ->
             ( { model | focusedZoneId = Just zoneId }, Cmd.none )
 
+        GotCatalog result ->
+            ( { model | catalog = toLoadable result }, Cmd.none )
+
+        OpenAddZone ->
+            case ( model.property, model.catalog ) of
+                ( Loaded p, Loaded c ) ->
+                    ( { model
+                        | editor = Just (ZoneEditor.init ZoneEditor.Create Nothing p c)
+                        , lastError = Nothing
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( { model | lastError = Just "Property + catalog must finish loading first." }
+                    , Cmd.none
+                    )
+
+        OpenEditZone zone ->
+            case ( model.property, model.catalog ) of
+                ( Loaded p, Loaded c ) ->
+                    let
+                        existing : Api.ZoneDefinition
+                        existing =
+                            { id = zone.id
+                            , yardId = zone.yardId
+                            , manifoldId = zone.manifoldId
+                            , plantKind = zone.plantKind
+                            , emitterSpecId = ""
+                            , soilTypeId = ""
+                            , areaSqFt = zone.areaSqFt
+                            , notes = Nothing
+                            }
+                    in
+                    -- Fetch the full definition so the editor opens with
+                    -- the *current* emitter/soil/notes, not the trimmed
+                    -- summary the property endpoint returns.
+                    ( { model
+                        | editor = Just (ZoneEditor.init (ZoneEditor.Edit zone.id) (Just existing) p c)
+                        , lastError = Nothing
+                      }
+                    , Cmd.batch [ fetchZoneDefinition zone.id p c ]
+                    )
+
+                _ ->
+                    ( { model | lastError = Just "Property + catalog must finish loading first." }
+                    , Cmd.none
+                    )
+
+        EditorMsg emsg ->
+            ( { model | editor = Maybe.map (ZoneEditor.update emsg) model.editor }
+            , Cmd.none
+            )
+
+        EditorSubmit ->
+            case model.editor of
+                Just f ->
+                    case ZoneEditor.submit f of
+                        Err errMsg ->
+                            ( { model
+                                | editor = Just { f | validationError = Just errMsg }
+                              }
+                            , Cmd.none
+                            )
+
+                        Ok (Err createReq) ->
+                            ( { model | busy = True }
+                            , Api.postCreateZone createReq ZoneCreated
+                            )
+
+                        Ok (Ok ( zoneId, updateReq )) ->
+                            ( { model | busy = True }
+                            , Api.postUpdateZone zoneId updateReq ZoneUpdated
+                            )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        EditorCancel ->
+            ( { model | editor = Nothing }, Cmd.none )
+
+        ZoneCreated (Ok _) ->
+            ( { model | busy = False, editor = Nothing }
+            , refreshAll
+            )
+
+        ZoneCreated (Err err) ->
+            ( { model
+                | busy = False
+                , editor =
+                    Maybe.map
+                        (\f -> { f | validationError = Just (httpErrorToString err) })
+                        model.editor
+              }
+            , Cmd.none
+            )
+
+        ZoneUpdated (Ok _) ->
+            ( { model | busy = False, editor = Nothing }
+            , refreshAll
+            )
+
+        ZoneUpdated (Err err) ->
+            ( { model
+                | busy = False
+                , editor =
+                    Maybe.map
+                        (\f -> { f | validationError = Just (httpErrorToString err) })
+                        model.editor
+              }
+            , Cmd.none
+            )
+
+        RequestDeleteZone zoneId ->
+            ( { model | confirmDeleteZoneId = Just zoneId, lastError = Nothing }
+            , Cmd.none
+            )
+
+        CancelDelete ->
+            ( { model | confirmDeleteZoneId = Nothing }, Cmd.none )
+
+        ConfirmDeleteZone zoneId ->
+            ( { model | busy = True, confirmDeleteZoneId = Nothing }
+            , Api.deleteZone zoneId ZoneDeleted
+            )
+
+        ZoneDeleted (Ok _) ->
+            ( { model | busy = False }
+            , refreshAll
+            )
+
+        ZoneDeleted (Err err) ->
+            ( { model | busy = False, lastError = Just (httpErrorToString err) }
+            , Cmd.none
+            )
+
+
+fetchZoneDefinition : String -> Api.Property -> Api.Catalog -> Cmd Msg
+fetchZoneDefinition _ _ _ =
+    -- Hook for Phase 12 follow-up: fetch the full zone definition
+    -- via /api/zones/definitions/{id} and refresh the editor with
+    -- accurate emitter/soil ids.  v0.1 leaves the editor's
+    -- defaults in place and relies on the user picking from the
+    -- dropdowns.
+    Cmd.none
+
 
 refreshAll : Cmd Msg
 refreshAll =
@@ -166,6 +331,7 @@ refreshAll =
         [ Api.fetchProperty GotProperty
         , Api.fetchState GotState
         , Api.fetchZones GotZones
+        , Api.fetchCatalog GotCatalog
         ]
 
 
@@ -273,9 +439,59 @@ viewLoaded model property state zonesResponse =
                             , onRun = RunZoneClicked zone.id
                             , onStop = StopZoneClicked zone.id
                             , onFocus = FocusZone zone.id
+                            , onEdit = OpenEditZone zone
+                            , onDelete = RequestDeleteZone zone.id
                             , isFocused = model.focusedZoneId == Just zone.id
                             }
                     )
+
+        editorOverlay : Html Msg
+        editorOverlay =
+            case ( model.editor, model.catalog ) of
+                ( Just f, Loaded c ) ->
+                    ZoneEditor.view
+                        { form = f
+                        , property = property
+                        , catalog = c
+                        , onMsg = EditorMsg
+                        , onSubmit = EditorSubmit
+                        , onCancel = EditorCancel
+                        , isBusy = model.busy
+                        }
+
+                _ ->
+                    text ""
+
+        deleteConfirm : Html Msg
+        deleteConfirm =
+            case model.confirmDeleteZoneId of
+                Just zid ->
+                    div [ Attr.class "modal-backdrop" ]
+                        [ div [ Attr.class "modal modal-confirm" ]
+                            [ h2 [] [ text "Delete zone?" ]
+                            , p []
+                                [ text "Removing "
+                                , Html.strong [] [ text zid ]
+                                , text " also clears its valve state and recorded history. This cannot be undone."
+                                ]
+                            , div [ Attr.class "form-actions" ]
+                                [ button
+                                    [ Attr.class "btn"
+                                    , onClick CancelDelete
+                                    ]
+                                    [ text "Cancel" ]
+                                , button
+                                    [ Attr.class "btn btn-delete"
+                                    , Attr.disabled model.busy
+                                    , onClick (ConfirmDeleteZone zid)
+                                    ]
+                                    [ text "Delete" ]
+                                ]
+                            ]
+                        ]
+
+                Nothing ->
+                    text ""
 
         errorBanner : Html Msg
         errorBanner =
@@ -318,9 +534,18 @@ viewLoaded model property state zonesResponse =
             , Weather.view state.weather
             ]
         , section [ Attr.class "dashboard-zones" ]
-            [ h2 [] [ text "Zones" ]
+            [ div [ Attr.class "zones-header" ]
+                [ h2 [] [ text "Zones" ]
+                , button
+                    [ Attr.class "btn btn-run"
+                    , onClick OpenAddZone
+                    ]
+                    [ text "+ Add zone" ]
+                ]
             , div [ Attr.class "zone-grid" ] zoneCards
             ]
+        , editorOverlay
+        , deleteConfirm
         ]
 
 

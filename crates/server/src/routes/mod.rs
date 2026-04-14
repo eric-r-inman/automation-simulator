@@ -8,6 +8,7 @@
 //! `AppState`, so v0.2 real-hardware drivers land without touching
 //! this file.
 
+pub mod catalog;
 pub mod sensors;
 pub mod sim;
 pub mod weather;

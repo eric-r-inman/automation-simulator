@@ -3,6 +3,25 @@
 
 * Upcoming
 
+- Wire zone CRUD into the dashboard.  Each zone card gains
+  =Edit= and =Delete= buttons; a =+ Add zone= button at the top
+  of the Zones section opens a modal form with dropdowns for
+  yard, manifold, plant kind, emitter spec, and soil type
+  (populated from the loaded property and a new
+  =GET /api/catalog= endpoint).  Successful submissions refetch
+  the dashboard so the cards reflect the new state immediately.
+  Delete prompts a confirmation dialog before firing.
+- Backend additions to support the editor:
+  =GET /api/sim/property= now also returns =manifolds= so the
+  editor's manifold dropdown has data.  A new =GET /api/catalog=
+  endpoint returns the emitter, soil-type, and species rows the
+  form needs.  Frontend Api.elm gains the matching types +
+  =fetchCatalog= / =postCreateZone= / =postUpdateZone= /
+  =deleteZone= helpers.
+- New widget =frontend/src/Widget/ZoneEditor.elm= drives the
+  modal form; styling lives in =public/style.css= as a hand-
+  written modal backdrop + grid-based form rows that collapse
+  to one column under 540 px.
 - Add zone-definition CRUD endpoints.  =POST /api/zones/definitions=
   creates a zone, =PATCH /api/zones/definitions/{id}= edits one,
   =DELETE /api/zones/definitions/{id}= removes one.  All three
