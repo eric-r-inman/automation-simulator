@@ -3,6 +3,13 @@
 
 * Upcoming
 
+* v0.1.2 (2026-04-14)
+
+Adds the =description= and =readme= manifest fields to the lib
+crate so crates.io will accept the publish (v0.1.1's publish
+attempt was rejected with =missing or empty metadata fields:
+description=).  No code changes.
+
 * v0.1.1 (2026-04-14)
 
 Republishes v0.1.0's content under a fresh patch version after

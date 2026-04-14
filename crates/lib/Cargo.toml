@@ -5,6 +5,8 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Deterministic simulation engine for automatic food-forest irrigation systems: catalog-driven domain model, soil-moisture ODE, hardware-abstraction traits, and SQLite persistence."
+readme = "../../README.org"
 
 [dependencies]
 tracing = { workspace = true }
