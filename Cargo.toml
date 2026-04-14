@@ -22,7 +22,7 @@ tracing-journald = "0.3"
 # Systemd integration.  Pinned to 0.4 pending the 0.5 API migration;
 # dependabot's auto-merged 0.5 bump (#7) broke sd-notify callsites in
 # crates/server/src/systemd.rs.
-sd-notify = "0.4"
+sd-notify = "0.5"
 
 # Utilities
 # tap - Enables method chaining and reduces superfluous local variables
