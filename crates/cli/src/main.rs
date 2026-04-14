@@ -1,54 +1,52 @@
-//! automation-simulator-cli - Command-line application template
+//! automation-simulator-cli — command-line entry point.
 //!
-//! # LLM Development Guidelines
-//! When modifying this code:
-//! - Keep configuration logic in config.rs
-//! - Keep business logic out of main.rs - use separate modules
-//! - Maintain the staged configuration pattern (CliRaw -> ConfigFileRaw -> Config)
-//! - Use semantic error types with thiserror - NO anyhow blindly wrapping errors
-//! - Add context at each error site explaining WHAT failed and WHY
-//! - Keep logging structured and consistent
+//! main.rs stays an orchestrator: it parses the top-level `Cli`,
+//! builds a `Config` for log settings, initializes logging, then
+//! dispatches the selected subcommand.  Business logic lives in
+//! `commands/*`.
 
+mod commands;
 mod config;
 mod logging;
 
 use clap::Parser;
-use config::{CliRaw, Config, ConfigError};
+use config::{Cli, Command, Config, ConfigError};
 use logging::init_logging;
 use thiserror::Error;
-use tracing::info;
+use tracing::error;
 
 #[derive(Debug, Error)]
 enum ApplicationError {
-  #[error("Failed to load configuration during startup: {0}")]
-  ConfigurationLoad(#[from] ConfigError),
+  #[error("configuration error: {0}")]
+  Config(#[from] ConfigError),
 
-  // Example of an execution error - expand with real errors as needed
-  #[allow(dead_code)]
-  #[error("Application execution failed: {0}")]
-  Execution(String),
+  #[error("seed command failed: {0}")]
+  Seed(#[from] commands::seed::SeedCommandError),
 }
 
-fn main() -> Result<(), ApplicationError> {
-  let cli = CliRaw::parse();
-
-  let config = Config::from_cli_and_file(cli).map_err(|e| {
+#[tokio::main]
+async fn main() -> Result<(), ApplicationError> {
+  let cli = Cli::parse();
+  let cfg = Config::from_cli(&cli).map_err(|e| {
     eprintln!("Configuration error: {}", e);
-    ApplicationError::ConfigurationLoad(e)
+    e
   })?;
+  init_logging(cfg.log_level, cfg.log_format);
 
-  init_logging(config.log_level, config.log_format);
+  match &cli.command {
+    Command::Seed {
+      property,
+      catalog,
+      db,
+    } => {
+      commands::seed::run(property, catalog, db)
+        .await
+        .map_err(|e| {
+          error!(error = %e, "Seed command failed");
+          ApplicationError::Seed(e)
+        })?;
+    }
+  }
 
-  info!("Starting automation-simulator-cli");
-  info!("Configuration loaded successfully");
-
-  run(config)?;
-
-  info!("Shutting down automation-simulator-cli");
-  Ok(())
-}
-
-fn run(config: Config) -> Result<(), ApplicationError> {
-  info!("Hello, {}!", config.name);
   Ok(())
 }

@@ -33,8 +33,10 @@ tap = "1.0"
 # CLI parsing
 clap = { version = "4.5", features = ["derive", "env"] }
 
-# Configuration.  toml is pinned to 0.8; dependabot's auto-merged 1.1
-# bump (#6) broke ConfigFileRaw deserialization.
+# Configuration.  toml tracks the 0.x line; 1.0+ is held back via
+# dependabot ignore (#6 first attempted the bump and broke
+# ConfigFileRaw deserialization).  0.9 landed via CI-gated auto-merge
+# once my ignore floor of >=1.0 let it through.
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.9"

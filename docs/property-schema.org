@@ -1,0 +1,158 @@
+#+title:     Property TOML Schema
+#+language:  en
+
+* Overview
+
+A /property fixture/ is a single TOML file describing one residential
+property's geometry, plantings, and hardware.  The =cli seed=
+subcommand parses a property file, cross-validates it against the
+hardware + species catalog at =data/catalog/=, and inserts it into a
+SQLite database.  The same shape is the target for the v0.3
+Designer UI when it saves a user-authored property.
+
+The authoritative reference is the Rust loader at
+=crates/lib/src/seed/=; this document captures the shape in prose.
+
+* Top-level tables
+
+Every property file has a =[property]= table plus zero or more of
+the following array-of-tables sections:
+
+- =[[manifolds]]=
+- =[[zones]]=
+- =[[plants]]=
+- =[[controllers]]=
+- =[[sensors]]=
+- =[[weather_stations]]=
+- =[[schedule]]=
+
+Absent sections are treated as empty.
+
+* =[property]= — required
+
+| Field                | Type    | Notes                                                                |
+|----------------------+---------+----------------------------------------------------------------------|
+| =id=                 | string  | Stable identifier; becomes =property.id= in the database             |
+| =name=               | string  | Human-readable label                                                 |
+| =climate_zone=       | string  | Climatology lookup key; the engine ships =portland-or= out of the box |
+| =lot_area_sq_ft=     | float   | Must be > 0                                                          |
+
+Nested inside =[property]=:
+
+** =[[property.yards]]=
+
+At least one is required.  Yards are arbitrary — front, back, side,
+courtyard, greenhouse — so the fixture reflects the real property
+rather than a hard-coded Front/Back enum.
+
+| Field        | Type   | Notes                 |
+|--------------+--------+-----------------------|
+| =id=         | string | Unique within property |
+| =name=       | string | Human-readable         |
+| =area_sq_ft= | float  | Must be > 0            |
+
+** =[[property.spigots]]=
+
+At least one is required.
+
+| Field                | Type          | Notes                                        |
+|----------------------+---------------+----------------------------------------------|
+| =id=                 | string        | Unique within property                       |
+| =mains_pressure_psi= | float         | Must be > 0; warned if outside [20, 120] psi |
+| =notes=              | string?       | Optional free-form                           |
+
+* =[[manifolds]]=
+
+Solenoid-valve manifolds between a spigot and the zone tubing.
+
+| Field           | Type   | Notes                                  |
+|-----------------+--------+----------------------------------------|
+| =id=            | string |                                        |
+| =model_id=      | string | References =data/catalog/manifolds.toml= |
+| =spigot_id=     | string | Must match a spigot id above           |
+| =zone_capacity= | int    | Must be > 0                            |
+
+* =[[zones]]=
+
+One row per irrigation zone.  Zones are the simulator's unit of
+water delivery.
+
+| Field             | Type   | Notes                                                   |
+|-------------------+--------+---------------------------------------------------------|
+| =id=              | string | Unique within property                                  |
+| =yard_id=         | string | Must match a yard id                                    |
+| =manifold_id=     | string | Must match a manifold id                                |
+| =plant_kind=      | string | =veggie-bed= / =shrub= / =perennial= / =tree=           |
+| =emitter_spec_id= | string | References =data/catalog/emitters.toml=; soft-warned if not typical for the plant kind |
+| =soil_type_id=    | string | References =data/catalog/soil-types.toml=               |
+| =area_sq_ft=      | float  | Must be > 0                                             |
+| =notes=           | string? |                                                         |
+
+* =[[plants]]=
+
+Individual plantings.  Water needs can be adjusted per-instance; the
+species row in the catalog carries a baseline default.
+
+| Field                    | Type   | Notes                                                      |
+|--------------------------+--------+------------------------------------------------------------|
+| =id=                     | string | Unique within property                                     |
+| =zone_id=                | string | Must match a zone id                                       |
+| =species_id=             | string | References =data/catalog/species.toml=                     |
+| =planted_on=             | date   | =YYYY-MM-DD=                                               |
+| =water_need_ml_per_day=  | float  | Must be in (0, 50 000]                                     |
+| =notes=                  | string? |                                                            |
+
+* =[[controllers]]=
+
+| Field               | Type     | Notes                                                                    |
+|---------------------+----------+--------------------------------------------------------------------------|
+| =id=                | string   |                                                                          |
+| =model_id=          | string   | References =data/catalog/controllers.toml=                               |
+| =zone_assignments=  | [string] | Ordered list of zone ids; index 0 is physical channel 1.  Each id must match a zone.  No duplicates. |
+| =notes=             | string?  |                                                                          |
+
+* =[[sensors]]=
+
+| Field      | Type    | Notes                                    |
+|------------+---------+------------------------------------------|
+| =id=       | string  |                                          |
+| =model_id= | string  | References =data/catalog/sensors.toml=   |
+| =zone_id=  | string  | Must match a zone id                     |
+| =notes=    | string? |                                          |
+
+* =[[weather_stations]]=
+
+| Field      | Type    | Notes                                                               |
+|------------+---------+---------------------------------------------------------------------|
+| =id=       | string  |                                                                     |
+| =model_id= | string  | References =data/catalog/weather-stations.toml=                     |
+| =yard_id=  | string? | Optional; when omitted the station reports property-wide data        |
+| =notes=    | string? |                                                                     |
+
+* =[[schedule]]=
+
+Default irrigation schedule; the UI can edit it after seeding.
+
+| Field                          | Type   | Notes                                                                    |
+|--------------------------------+--------+--------------------------------------------------------------------------|
+| =zone_id=                      | string | Must match a zone id                                                     |
+| =start_time_minutes_of_day=    | int    | 0–1 439                                                                  |
+| =duration_minutes=             | int    | > 0                                                                      |
+| =day_mask=                     | int    | Seven-bit bitmask, Monday = 1 … Sunday = 64; 127 = every day; 0 = paused |
+
+* Validation order
+
+The loader runs checks in this order so each error blames the right
+thing:
+
+1. File read and TOML parse.
+2. Individual ~TryFrom<*Raw>~ calls per entity.
+3. Cross-references within the file (zone → yard + manifold, plant
+   → zone, controller → zones, sensor → zone, weather_station →
+   optional yard, manifold → spigot).
+4. Catalog references (zone → soil_type + emitter_spec, plant →
+   species, controller → controller model, sensor → sensor model,
+   weather_station → weather-station model).
+
+Any failure returns a ~SeedError~ that names the fixture path, the
+entity, and the offending id.

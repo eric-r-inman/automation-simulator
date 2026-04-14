@@ -1,130 +1,75 @@
+//! CLI-level smoke tests.
+//!
+//! The substantive behavior of each subcommand is exercised by
+//! the library's own integration tests.  This file only checks
+//! that the binary builds, the help/version flags work, and the
+//! subcommand dispatch produces a non-zero exit on bad input
+//! (so CI catches a broken command registration).
+
 use std::{path::PathBuf, process::Command};
 
 fn get_binary_path() -> PathBuf {
   let mut path =
     std::env::current_exe().expect("Failed to get current executable path");
-
-  // Navigate from the test executable to the binary
-  path.pop(); // remove test executable name
-  path.pop(); // remove deps dir
+  path.pop();
+  path.pop();
   path.push("automation-simulator-cli");
-
-  // If the binary doesn't exist in release, try debug
   if !path.exists() {
     path.pop();
     path.pop();
     path.push("debug");
     path.push("automation-simulator-cli");
   }
-
   path
 }
 
 #[test]
 fn test_help_flag() {
-  let output = Command::new(get_binary_path()).arg("--help").output();
-
-  match output {
-    Ok(output) => {
-      assert!(
-        output.status.success(),
-        "Expected success exit code, got: {:?}",
-        output.status.code()
-      );
-      let stdout = String::from_utf8_lossy(&output.stdout);
-      assert!(
-        stdout.contains("Usage:"),
-        "Expected help text to contain 'Usage:', got: {}",
-        stdout
-      );
-    }
-    Err(e) => {
-      if e.kind() == std::io::ErrorKind::NotFound {
-        eprintln!(
-                    "Binary not found. Please build the project first with: cargo build -p automation-simulator-cli"
-                );
-      }
-      panic!("Failed to execute binary: {}", e);
-    }
-  }
+  let output = Command::new(get_binary_path())
+    .arg("--help")
+    .output()
+    .expect("run");
+  assert!(output.status.success(), "--help must succeed");
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert!(stdout.contains("Usage:"));
+  // The subcommand should appear in the top-level help so users
+  // discover it without extra flags.
+  assert!(
+    stdout.contains("seed"),
+    "top-level help must advertise the 'seed' subcommand, got:\n{stdout}"
+  );
 }
 
 #[test]
 fn test_version_flag() {
-  let output = Command::new(get_binary_path()).arg("--version").output();
-
-  match output {
-    Ok(output) => {
-      assert!(
-        output.status.success(),
-        "Expected success exit code, got: {:?}",
-        output.status.code()
-      );
-      let stdout = String::from_utf8_lossy(&output.stdout);
-      assert!(
-        stdout.contains("automation-simulator-cli"),
-        "Expected version text to contain 'automation-simulator-cli', got: {}",
-        stdout
-      );
-    }
-    Err(e) => {
-      if e.kind() == std::io::ErrorKind::NotFound {
-        eprintln!(
-                    "Binary not found. Please build the project first with: cargo build -p automation-simulator-cli"
-                );
-      }
-      panic!("Failed to execute binary: {}", e);
-    }
-  }
-}
-
-#[test]
-fn test_basic_execution() {
-  let output = Command::new(get_binary_path()).output();
-
-  match output {
-    Ok(output) => {
-      assert!(
-        output.status.success(),
-        "Expected success exit code, got: {:?}\nstderr: {}",
-        output.status.code(),
-        String::from_utf8_lossy(&output.stderr)
-      );
-    }
-    Err(e) => {
-      if e.kind() == std::io::ErrorKind::NotFound {
-        eprintln!(
-                    "Binary not found. Please build the project first with: cargo build -p automation-simulator-cli"
-                );
-      }
-      panic!("Failed to execute binary: {}", e);
-    }
-  }
-}
-
-#[test]
-fn test_with_name_argument() {
   let output = Command::new(get_binary_path())
-    .arg("--name")
-    .arg("Rust")
-    .output();
+    .arg("--version")
+    .output()
+    .expect("run");
+  assert!(output.status.success());
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert!(stdout.contains("automation-simulator-cli"));
+}
 
-  match output {
-    Ok(output) => {
-      assert!(
-        output.status.success(),
-        "Expected success exit code, got: {:?}\nstderr: {}",
-        output.status.code(),
-        String::from_utf8_lossy(&output.stderr)
-      );
-    }
-    Err(e) => {
-      if e.kind() == std::io::ErrorKind::NotFound {
-        eprintln!(
-                    "Binary not found. Please build the project first with: cargo build -p automation-simulator-cli"
-                );
-      }
-      panic!("Failed to execute binary: {}", e);
-    }
-  }
+#[test]
+fn test_missing_subcommand_is_error() {
+  // With subcommands required, bare invocation should exit non-zero.
+  let output = Command::new(get_binary_path()).output().expect("run");
+  assert!(
+    !output.status.success(),
+    "bare invocation must fail now that subcommands are required"
+  );
+}
+
+#[test]
+fn test_seed_help() {
+  let output = Command::new(get_binary_path())
+    .args(["seed", "--help"])
+    .output()
+    .expect("run");
+  assert!(output.status.success());
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert!(stdout.contains("--property"));
+  assert!(stdout.contains("--catalog"));
+  assert!(stdout.contains("--db"));
 }

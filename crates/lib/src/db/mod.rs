@@ -24,7 +24,7 @@ pub use errors::{DbOpenError, MigrationError, QueryError};
 pub use rows::{
   ControllerInstanceRow, ManifoldRow, PlantRow, PropertyDesignRow, PropertyRow,
   ScheduleItemRow, SensorInstanceRow, SensorReadingRow, SimEventRow, SimRunRow,
-  SpigotRow, WateringLogRow, YardRow, ZoneRow,
+  SpigotRow, WateringLogRow, WeatherStationInstanceRow, YardRow, ZoneRow,
 };
 
 use sqlx::sqlite::{
@@ -291,6 +291,26 @@ impl SimDb {
     .execute(&self.pool)
     .await
     .map_err(|e| QueryError::sqlx("insert_sensor_instance", e))?;
+    Ok(())
+  }
+
+  pub async fn insert_weather_station_instance(
+    &self,
+    row: &WeatherStationInstanceRow,
+  ) -> Result<(), QueryError> {
+    sqlx::query(
+      r#"INSERT INTO weather_station_instance
+           (id, property_id, model_id, yard_id, notes)
+         VALUES (?, ?, ?, ?, ?)"#,
+    )
+    .bind(&row.id)
+    .bind(&row.property_id)
+    .bind(&row.model_id)
+    .bind(&row.yard_id)
+    .bind(&row.notes)
+    .execute(&self.pool)
+    .await
+    .map_err(|e| QueryError::sqlx("insert_weather_station_instance", e))?;
     Ok(())
   }
 
