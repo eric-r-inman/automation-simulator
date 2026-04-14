@@ -3,6 +3,12 @@
 
 * Upcoming
 
+* v0.1.1 (2026-04-14)
+
+Republishes v0.1.0's content under a fresh patch version after
+adding =CARGO_REGISTRY_TOKEN= to the repo so the publish
+workflow can actually push to crates.io.  No code changes.
+
 * v0.1.0 (2026-04-14)
 
 First simulator-only release.  No real-hardware drivers and no
