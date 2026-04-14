@@ -18,6 +18,7 @@ import Html.Attributes as Attr
 import Http
 import Json.Decode as Decode
 import Page.Dashboard as Dashboard
+import Page.Designer as Designer
 import Url exposing (Url)
 import Url.Parser exposing (Parser, oneOf, top)
 
@@ -28,6 +29,7 @@ import Url.Parser exposing (Parser, oneOf, top)
 
 type Route
     = Dashboard
+    | DesignerRoute
     | Me
     | NotFound
 
@@ -36,6 +38,7 @@ routeParser : Parser (Route -> a) a
 routeParser =
     oneOf
         [ Url.Parser.map Dashboard top
+        , Url.Parser.map DesignerRoute (Url.Parser.s "designer")
         , Url.Parser.map Me (Url.Parser.s "me")
         ]
 
@@ -68,6 +71,7 @@ type MeStatus
 
 type Page
     = DashboardPage Dashboard.Model
+    | DesignerPage Designer.Model
     | MePage MeStatus
     | NotFoundPage
 
@@ -87,6 +91,7 @@ type Msg
     = UrlRequested Browser.UrlRequest
     | UrlChanged Url
     | DashboardMsg Dashboard.Msg
+    | DesignerMsg Designer.Msg
     | GotMe (Result Http.Error MeInfo)
 
 
@@ -122,6 +127,13 @@ initPage route =
                     Dashboard.init
             in
             ( DashboardPage m, Cmd.map DashboardMsg c )
+
+        DesignerRoute ->
+            let
+                ( m, c ) =
+                    Designer.init
+            in
+            ( DesignerPage m, Cmd.map DesignerMsg c )
 
         Me ->
             ( MePage MeLoading, fetchMe )
@@ -179,6 +191,20 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        DesignerMsg dmsg ->
+            case model.page of
+                DesignerPage dmodel ->
+                    let
+                        ( newModel, cmd ) =
+                            Designer.update dmsg dmodel
+                    in
+                    ( { model | page = DesignerPage newModel }
+                    , Cmd.map DesignerMsg cmd
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
         GotMe result ->
             case model.page of
                 MePage _ ->
@@ -210,6 +236,8 @@ view model =
             [ nav [ Attr.class "site-nav" ]
                 [ a [ Attr.href "/" ] [ text "Dashboard" ]
                 , text " · "
+                , a [ Attr.href "/designer" ] [ text "Designer" ]
+                , text " · "
                 , a [ Attr.href "/me" ] [ text "Me" ]
                 , text " · "
                 , a [ Attr.href "/scalar" ] [ text "API docs" ]
@@ -225,6 +253,9 @@ viewPage model =
     case model.page of
         DashboardPage dmodel ->
             Html.map DashboardMsg (Dashboard.view dmodel)
+
+        DesignerPage dmodel ->
+            Html.map DesignerMsg (Designer.view dmodel)
 
         MePage status ->
             viewMe status

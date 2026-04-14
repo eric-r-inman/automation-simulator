@@ -594,3 +594,197 @@ button.btn-delete:hover:not([disabled]) {
     margin-bottom: 0.15rem;
   }
 }
+
+/* ── Designer page ────────────────────────────────────────────────────── */
+
+.designer-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.designer-intro {
+  color: var(--color-text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.designer-form,
+.designer-plans {
+  margin-bottom: 2rem;
+}
+
+.plan-form fieldset {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.plan-form legend {
+  padding: 0 0.5rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.form-field {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+}
+
+.form-field-label {
+  flex: 0 0 14rem;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.form-field input[type="text"],
+.form-field select {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.form-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.yard-block {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  background: var(--color-surface-alt);
+}
+
+.yard-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.yard-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.zones-sub {
+  margin-top: 0.75rem;
+  padding-left: 0.5rem;
+  border-left: 3px solid var(--color-border);
+}
+
+.zones-sub h3 {
+  font-size: 0.95rem;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.zone-block {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 0.5rem;
+  align-items: end;
+  padding: 0.4rem 0;
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.zone-block .form-field {
+  padding: 0;
+}
+
+.zone-block .form-field-label {
+  flex: 0;
+  min-width: 5rem;
+  font-size: 0.8rem;
+}
+
+.btn-add {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px dashed var(--color-border);
+}
+
+.btn-remove {
+  background: transparent;
+  color: var(--color-error, #a33);
+  border: 1px solid var(--color-border);
+  font-size: 0.8rem;
+}
+
+.btn-primary {
+  background: var(--color-accent, #2a6);
+  color: white;
+  padding: 0.5rem 1.25rem;
+  font-weight: 600;
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+.plans-grid h2 {
+  grid-column: 1 / -1;
+  margin: 0 0 0.5rem;
+}
+
+.plan-card {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  background: var(--color-surface);
+}
+
+.plan-card h3 {
+  margin-top: 0;
+}
+
+.plan-controller,
+.plan-score,
+.plan-total {
+  margin: 0.25rem 0;
+  color: var(--color-text-muted);
+}
+
+.plan-total {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.bom-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.bom-table th,
+.bom-table td {
+  padding: 0.25rem 0.4rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.bom-table th {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.plans-failed {
+  border: 1px solid var(--color-border-error);
+  background: var(--color-bg-error);
+  color: var(--color-error);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+}
