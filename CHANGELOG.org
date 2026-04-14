@@ -3,6 +3,32 @@
 
 * Upcoming
 
+- Phase 13a catalog-driven planner (backend).  New
+  =crates/lib/src/planner/= module: =PropertyRequirements= plus
+  a deterministic =planner::recommend= that enumerates up to
+  three controller options (cheapest, smart-preferred,
+  most-capable), one manifold per yard, emitter per plant kind,
+  a 25-PSI regulator, and a backflow preventer, scores the
+  results, and returns ranked =PropertyPlan=s.  Each plan
+  carries a validated =PropertyBundle=, a bill of materials,
+  and a short rationale.  The planner is strictly
+  catalog-driven: brand names live only in TOML, never in
+  source.  Added an =is_smart= field on =ControllerModel= so
+  the smart-preference heuristic is a catalog fact, not a
+  hard-coded string list.
+- =POST /api/plan= wraps the recommender over HTTP.  DTO layer
+  accepts kebab-case plant kinds, clamps =top_n= to [1, 10],
+  and maps unsatisfiable-requirement variants of
+  =PlannerError= to 400 (semantic user errors) versus 500
+  (internal invariants).  Scalar docs pick up the request /
+  response schemas automatically.
+- Tests: +6 planner unit tests
+  (=crates/lib/tests/planner_recommend.rs=: non-empty plans,
+  sorted-by-score, determinism, zero-zones and unknown-soil
+  errors, smart-preference resolution) and +3 server
+  integration tests for =/api/plan= (ranked candidates, bad
+  plant kind → 400, zero zones → 400).  Full workspace now at
+  135/135 passing.
 - Phase 12 catalog breadth.  Grow =data/catalog/= so the
   dropdowns and the v0.3 planner have real choices to pick
   from.  +7 controllers (now 8: OpenSprinkler OS-Pi, Rachio 3

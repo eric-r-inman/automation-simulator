@@ -31,6 +31,10 @@ pub struct ControllerModel {
   /// Nominal coil drive voltage for the solenoid valves this
   /// controller switches.  Typical residential values are 24 V AC.
   pub valve_voltage_ac: f64,
+  /// True for Wi-Fi + weather-aware "smart" controllers — used by
+  /// the planner to satisfy `prefer_smart_controller` requests.
+  #[serde(default)]
+  pub is_smart: bool,
   #[serde(default)]
   pub notes: Option<String>,
 }

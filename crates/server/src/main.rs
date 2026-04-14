@@ -135,6 +135,7 @@ fn create_app(state: AppState) -> Router {
       .merge(routes::sensors::router())
       .merge(routes::weather::router())
       .merge(routes::catalog::router())
+      .merge(routes::planner::router())
       .with_state(state.clone()),
   );
 
