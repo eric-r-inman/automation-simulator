@@ -1,5 +1,11 @@
 module Api exposing
-    ( Property
+    ( Catalog
+    , CatalogEmitter
+    , CatalogSoilType
+    , CatalogSpecies
+    , DeletedResult
+    , Manifold
+    , Property
     , Reading
     , ResetResult
     , RunResult
@@ -10,18 +16,26 @@ module Api exposing
     , Weather
     , Yard
     , Zone
+    , ZoneCreateRequest
+    , ZoneDefinition
     , ZoneState
     , ZoneStatus
+    , ZoneUpdateRequest
     , ZonesResponse
+    , deleteZone
+    , emptyZoneUpdate
+    , fetchCatalog
     , fetchProperty
     , fetchSensors
     , fetchState
     , fetchWeather
     , fetchZones
+    , postCreateZone
     , postReset
     , postRunZone
     , postStep
     , postStopZone
+    , postUpdateZone
     )
 
 {-| HTTP wiring against the Phase 7a sim routes.
@@ -49,7 +63,16 @@ type alias Property =
     , lotAreaSqFt : Float
     , yards : List Yard
     , spigots : List Spigot
+    , manifolds : List Manifold
     , zones : List Zone
+    }
+
+
+type alias Manifold =
+    { id : String
+    , modelId : String
+    , spigotId : String
+    , zoneCapacity : Int
     }
 
 
@@ -143,6 +166,92 @@ type alias Reading =
     }
 
 
+type alias Catalog =
+    { emitters : List CatalogEmitter
+    , soilTypes : List CatalogSoilType
+    , species : List CatalogSpecies
+    }
+
+
+type alias CatalogEmitter =
+    { id : String
+    , name : String
+    , manufacturer : String
+    , shape : String
+    , flowGph : Float
+    , pressureCompensating : Bool
+    }
+
+
+type alias CatalogSoilType =
+    { id : String
+    , name : String
+    , fieldCapacityVwc : Float
+    , wiltingPointVwc : Float
+    }
+
+
+type alias CatalogSpecies =
+    { id : String
+    , commonName : String
+    , scientificName : String
+    , plantKind : String
+    , waterNeedBaseMlPerDay : Float
+    }
+
+
+type alias ZoneDefinition =
+    { id : String
+    , yardId : String
+    , manifoldId : String
+    , plantKind : String
+    , emitterSpecId : String
+    , soilTypeId : String
+    , areaSqFt : Float
+    , notes : Maybe String
+    }
+
+
+type alias ZoneCreateRequest =
+    { id : String
+    , yardId : String
+    , manifoldId : String
+    , plantKind : String
+    , emitterSpecId : String
+    , soilTypeId : String
+    , areaSqFt : Float
+    , notes : Maybe String
+    }
+
+
+type alias ZoneUpdateRequest =
+    { yardId : Maybe String
+    , manifoldId : Maybe String
+    , plantKind : Maybe String
+    , emitterSpecId : Maybe String
+    , soilTypeId : Maybe String
+    , areaSqFt : Maybe Float
+    , notes : Maybe String
+    }
+
+
+emptyZoneUpdate : ZoneUpdateRequest
+emptyZoneUpdate =
+    { yardId = Nothing
+    , manifoldId = Nothing
+    , plantKind = Nothing
+    , emitterSpecId = Nothing
+    , soilTypeId = Nothing
+    , areaSqFt = Nothing
+    , notes = Nothing
+    }
+
+
+type alias DeletedResult =
+    { zoneId : String
+    }
+
+
 
 -- ── HTTP commands ─────────────────────────────────────────────────────────
 
@@ -229,6 +338,97 @@ postStopZone zoneId toMsg =
         }
 
 
+fetchCatalog : (Result Http.Error Catalog -> msg) -> Cmd msg
+fetchCatalog toMsg =
+    Http.get
+        { url = "/api/catalog"
+        , expect = Http.expectJson toMsg catalogDecoder
+        }
+
+
+postCreateZone : ZoneCreateRequest -> (Result Http.Error ZoneDefinition -> msg) -> Cmd msg
+postCreateZone req toMsg =
+    Http.post
+        { url = "/api/zones/definitions"
+        , body = Http.jsonBody (zoneCreateEncoder req)
+        , expect = Http.expectJson toMsg zoneDefinitionDecoder
+        }
+
+
+postUpdateZone : String -> ZoneUpdateRequest -> (Result Http.Error ZoneDefinition -> msg) -> Cmd msg
+postUpdateZone zoneId req toMsg =
+    -- elm/http exposes Http.request rather than a dedicated Http.patch.
+    Http.request
+        { method = "PATCH"
+        , headers = []
+        , url = "/api/zones/definitions/" ++ zoneId
+        , body = Http.jsonBody (zoneUpdateEncoder req)
+        , expect = Http.expectJson toMsg zoneDefinitionDecoder
+        , timeout = Nothing
+        , tracker = Nothing
+        }
+
+
+deleteZone : String -> (Result Http.Error DeletedResult -> msg) -> Cmd msg
+deleteZone zoneId toMsg =
+    Http.request
+        { method = "DELETE"
+        , headers = []
+        , url = "/api/zones/definitions/" ++ zoneId
+        , body = Http.emptyBody
+        , expect = Http.expectJson toMsg deletedResultDecoder
+        , timeout = Nothing
+        , tracker = Nothing
+        }
+
+
+zoneCreateEncoder : ZoneCreateRequest -> Encode.Value
+zoneCreateEncoder req =
+    let
+        notes =
+            case req.notes of
+                Just s ->
+                    [ ( "notes", Encode.string s ) ]
+
+                Nothing ->
+                    []
+    in
+    Encode.object
+        ([ ( "id", Encode.string req.id )
+         , ( "yard_id", Encode.string req.yardId )
+         , ( "manifold_id", Encode.string req.manifoldId )
+         , ( "plant_kind", Encode.string req.plantKind )
+         , ( "emitter_spec_id", Encode.string req.emitterSpecId )
+         , ( "soil_type_id", Encode.string req.soilTypeId )
+         , ( "area_sq_ft", Encode.float req.areaSqFt )
+         ]
+            ++ notes
+        )
+
+
+zoneUpdateEncoder : ZoneUpdateRequest -> Encode.Value
+zoneUpdateEncoder req =
+    let
+        maybeField : String -> Maybe a -> (a -> Encode.Value) -> List ( String, Encode.Value )
+        maybeField key m enc =
+            case m of
+                Just v ->
+                    [ ( key, enc v ) ]
+
+                Nothing ->
+                    []
+    in
+    Encode.object
+        (maybeField "yard_id" req.yardId Encode.string
+            ++ maybeField "manifold_id" req.manifoldId Encode.string
+            ++ maybeField "plant_kind" req.plantKind Encode.string
+            ++ maybeField "emitter_spec_id" req.emitterSpecId Encode.string
+            ++ maybeField "soil_type_id" req.soilTypeId Encode.string
+            ++ maybeField "area_sq_ft" req.areaSqFt Encode.float
+            ++ maybeField "notes" req.notes Encode.string
+        )
+
+
 
 -- ── Decoders ──────────────────────────────────────────────────────────────
 --
@@ -240,14 +440,24 @@ postStopZone zoneId toMsg =
 
 propertyDecoder : Decoder Property
 propertyDecoder =
-    Decode.map7 Property
+    Decode.map8 Property
         (Decode.field "id" Decode.string)
         (Decode.field "name" Decode.string)
         (Decode.field "climate_zone" Decode.string)
         (Decode.field "lot_area_sq_ft" Decode.float)
         (Decode.field "yards" (Decode.list yardDecoder))
         (Decode.field "spigots" (Decode.list spigotDecoder))
+        (Decode.field "manifolds" (Decode.list manifoldDecoder))
         (Decode.field "zones" (Decode.list zoneDecoder))
+
+
+manifoldDecoder : Decoder Manifold
+manifoldDecoder =
+    Decode.map4 Manifold
+        (Decode.field "id" Decode.string)
+        (Decode.field "model_id" Decode.string)
+        (Decode.field "spigot_id" Decode.string)
+        (Decode.field "zone_capacity" Decode.int)
 
 
 yardDecoder : Decoder Yard
@@ -356,3 +566,60 @@ readingDecoder =
         (Decode.field "kind" Decode.string)
         (Decode.field "value" Decode.float)
         (Decode.field "taken_at_minutes" Decode.int)
+
+
+catalogDecoder : Decoder Catalog
+catalogDecoder =
+    Decode.map3 Catalog
+        (Decode.field "emitters" (Decode.list emitterDecoder))
+        (Decode.field "soil_types" (Decode.list soilTypeDecoder))
+        (Decode.field "species" (Decode.list speciesDecoder))
+
+
+emitterDecoder : Decoder CatalogEmitter
+emitterDecoder =
+    Decode.map6 CatalogEmitter
+        (Decode.field "id" Decode.string)
+        (Decode.field "name" Decode.string)
+        (Decode.field "manufacturer" Decode.string)
+        (Decode.field "shape" Decode.string)
+        (Decode.field "flow_gph" Decode.float)
+        (Decode.field "pressure_compensating" Decode.bool)
+
+
+soilTypeDecoder : Decoder CatalogSoilType
+soilTypeDecoder =
+    Decode.map4 CatalogSoilType
+        (Decode.field "id" Decode.string)
+        (Decode.field "name" Decode.string)
+        (Decode.field "field_capacity_vwc" Decode.float)
+        (Decode.field "wilting_point_vwc" Decode.float)
+
+
+speciesDecoder : Decoder CatalogSpecies
+speciesDecoder =
+    Decode.map5 CatalogSpecies
+        (Decode.field "id" Decode.string)
+        (Decode.field "common_name" Decode.string)
+        (Decode.field "scientific_name" Decode.string)
+        (Decode.field "plant_kind" Decode.string)
+        (Decode.field "water_need_base_ml_per_day" Decode.float)
+
+
+zoneDefinitionDecoder : Decoder ZoneDefinition
+zoneDefinitionDecoder =
+    Decode.map8 ZoneDefinition
+        (Decode.field "id" Decode.string)
+        (Decode.field "yard_id" Decode.string)
+        (Decode.field "manifold_id" Decode.string)
+        (Decode.field "plant_kind" Decode.string)
+        (Decode.field "emitter_spec_id" Decode.string)
+        (Decode.field "soil_type_id" Decode.string)
+        (Decode.field "area_sq_ft" Decode.float)
+        (Decode.maybe (Decode.field "notes" Decode.string))
+
+
+deletedResultDecoder : Decoder DeletedResult
+deletedResultDecoder =
+    Decode.map DeletedResult
+        (Decode.field "zone_id" Decode.string)

@@ -188,6 +188,7 @@ fn app_with_sim_routes(state: AppState) -> Router {
       .merge(routes::zones_crud::router())
       .merge(routes::sensors::router())
       .merge(routes::weather::router())
+      .merge(routes::catalog::router())
       .with_state(state.clone()),
   );
   base_router(state).merge(sim_routes)
@@ -559,7 +560,29 @@ async fn test_get_property_returns_loaded_fixture() {
   assert_eq!(body["climate_zone"], "portland-or");
   assert_eq!(body["yards"].as_array().unwrap().len(), 2);
   assert_eq!(body["spigots"].as_array().unwrap().len(), 2);
+  assert_eq!(body["manifolds"].as_array().unwrap().len(), 2);
   assert_eq!(body["zones"].as_array().unwrap().len(), 6);
+  // First manifold should carry its catalog model id and capacity.
+  let first = &body["manifolds"][0];
+  assert!(first["model_id"].is_string());
+  assert!(first["zone_capacity"].is_number());
+}
+
+#[tokio::test]
+async fn test_get_catalog_returns_emitters_soils_species() {
+  let app = app_with_sim_routes(state_without_frontend());
+  let body = json_get(&app, "/api/catalog").await;
+  let emitters = body["emitters"].as_array().unwrap();
+  let soils = body["soil_types"].as_array().unwrap();
+  let species = body["species"].as_array().unwrap();
+  assert!(!emitters.is_empty(), "expected at least one emitter");
+  assert!(!soils.is_empty(), "expected at least one soil type");
+  assert!(!species.is_empty(), "expected at least one species");
+  // Every entry must have an id and a human-readable name.
+  for e in emitters {
+    assert!(e["id"].is_string());
+    assert!(e["name"].is_string());
+  }
 }
 
 #[tokio::test]
