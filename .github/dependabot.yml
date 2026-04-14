@@ -3,11 +3,19 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      # Weekly is enough for a solo-maintained project; daily drowned
+      # the queue in seven PRs within an hour of repo creation.
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    # Reduce noise: group patch-level dev-dependency bumps into a
+    # single PR so they can be reviewed together.
+    groups:
+      patch-bumps:
+        update-types:
+          - "patch"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 2
