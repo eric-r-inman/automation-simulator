@@ -93,7 +93,7 @@ uuid = { version = "1", features = ["serde", "v4"] }
 # Seeded RNG for deterministic scenario runs.  ChaCha8 is fast and
 # portable across platforms, which matters for reproducible snapshots.
 rand = "0.8"
-rand_chacha = "0.3"
+rand_chacha = "0.9"
 
 # Test-only crates.  proptest drives property-based tests of the soil
 # moisture model and scheduler; insta captures snapshots of simulation
