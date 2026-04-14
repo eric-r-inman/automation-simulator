@@ -1,0 +1,14 @@
+---
+source: crates/lib/tests/catalog_snapshot.rs
+assertion_line: 64
+expression: ids
+---
+- 1gph-pc
+- 2gph-pc
+- bubbler
+- dramm-1gph-pc
+- inline-drip-12in
+- micro-spray
+- netafim-techline-cv-12in
+- netafim-techline-cv-18in
+- rain-bird-xeri-1gph

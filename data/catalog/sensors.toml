@@ -19,3 +19,44 @@ price_usd = 20.00
 kind = "soil-moisture"
 gateway_model_id = "example-wireless-gateway"
 notes = "Battery-powered probe, one per zone."
+
+[ecowitt-gw2000]
+id = "ecowitt-gw2000"
+name = "Ecowitt GW2000 Wi-Fi Gateway"
+manufacturer = "Ecowitt"
+price_usd = 50.00
+kind = "gateway"
+notes = "Wi-Fi hub for the WH51 + WS90 line; can push HTTP every 60 s."
+
+[ecowitt-wh51]
+id = "ecowitt-wh51"
+name = "Ecowitt WH51 Wireless Soil Moisture Sensor"
+manufacturer = "Ecowitt"
+price_usd = 20.00
+kind = "soil-moisture"
+gateway_model_id = "ecowitt-gw2000"
+notes = "Battery-powered (2x AA), 60-day battery life, waterproof.  Pairs to GW2000."
+
+[generic-resistive-soil]
+id = "generic-resistive-soil"
+name = "Generic Resistive Soil Moisture Probe"
+manufacturer = "Generic"
+price_usd = 5.00
+kind = "soil-moisture"
+notes = "Wired probe; user provides their own ADC + bridge.  No gateway."
+
+[rachio-wireless-flow]
+id = "rachio-wireless-flow"
+name = "Rachio Wireless Flow Meter"
+manufacturer = "Rachio"
+price_usd = 230.00
+kind = "flow"
+notes = "Inline flow meter; reports gallons per minute back to the Rachio controller."
+
+[davis-vantage-vue-soil]
+id = "davis-vantage-vue-soil"
+name = "Davis Vantage Vue Leaf & Soil Moisture Station"
+manufacturer = "Davis Instruments"
+price_usd = 250.00
+kind = "soil-moisture"
+notes = "Multi-sensor weather + soil station.  Adds wind / temp data alongside soil moisture."

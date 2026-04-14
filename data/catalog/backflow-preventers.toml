@@ -11,3 +11,19 @@ manufacturer = "Example Manufacturer"
 price_usd = 15.00
 kind = "atmospheric-vacuum-breaker"
 notes = "Minimum legally acceptable backflow protection for residential drip."
+
+[orbit-pvb-3-4]
+id = "orbit-pvb-3-4"
+name = "Orbit Pressure Vacuum Breaker (3/4\")"
+manufacturer = "Orbit"
+price_usd = 28.00
+kind = "pressure-vacuum-breaker"
+notes = "PVB raises the bar above AVB; required by some municipalities for irrigation."
+
+[generic-rpz]
+id = "generic-rpz"
+name = "Generic 3/4\" Reduced-Pressure Zone Backflow"
+manufacturer = "Generic"
+price_usd = 175.00
+kind = "reduced-pressure-zone"
+notes = "Highest residential protection class; required when the system can ever be cross-connected to chemicals (e.g. fertilizer injection)."

@@ -10,3 +10,33 @@ price_usd = 12.00
 input_psi_min = 20.0
 input_psi_max = 120.0
 output_psi = 25.0
+
+[rain-bird-prv-25]
+id = "rain-bird-prv-25"
+name = "Rain Bird PRV-25 Drip Pressure Regulator"
+manufacturer = "Rain Bird"
+price_usd = 14.00
+input_psi_min = 20.0
+input_psi_max = 100.0
+output_psi = 25.0
+notes = "3/4\" hose-thread; bullet-proof for residential drip."
+
+[hunter-prl-30]
+id = "hunter-prl-30"
+name = "Hunter PRL Pressure Regulator (30 PSI)"
+manufacturer = "Hunter Industries"
+price_usd = 18.00
+input_psi_min = 30.0
+input_psi_max = 130.0
+output_psi = 30.0
+notes = "Higher output for larger-orifice emitters and bubblers."
+
+[generic-15psi-regulator]
+id = "generic-15psi-regulator"
+name = "Generic 15 PSI Drip Pressure Regulator"
+manufacturer = "Generic"
+price_usd = 11.00
+input_psi_min = 20.0
+input_psi_max = 80.0
+output_psi = 15.0
+notes = "Lower output for low-flow emitters or short laterals."
