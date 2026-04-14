@@ -12,5 +12,15 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 tap = { workspace = true }  # For method chaining, reduces superfluous locals
 
+# Added in Phase 1: crates the simulator core will depend on.  Wired up
+# here so later phases can import without re-touching Cargo manifests.
+sqlx = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+
 [dev-dependencies]
 cargo-husky = { version = "1", default-features = false, features = ["user-hooks"] }
+proptest = { workspace = true }
+insta = { workspace = true }

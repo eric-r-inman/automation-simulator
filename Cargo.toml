@@ -9,7 +9,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["Eric Rinman <ericrinman@gmail.com>"]
+authors = ["Eric Inman <ericrinman@gmail.com>"]
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/eric-r-inman/automation-simulator"
 
@@ -19,8 +19,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
 tracing-journald = "0.3"
 
-# Systemd integration
-sd-notify = "0.5"
+# Systemd integration.  Pinned to 0.4 pending the 0.5 API migration;
+# dependabot's auto-merged 0.5 bump (#7) broke sd-notify callsites in
+# crates/server/src/systemd.rs.
+sd-notify = "0.4"
 
 # Utilities
 # tap - Enables method chaining and reduces superfluous local variables
@@ -31,10 +33,11 @@ tap = "1.0"
 # CLI parsing
 clap = { version = "4.5", features = ["derive", "env"] }
 
-# Configuration
+# Configuration.  toml is pinned to 0.8; dependabot's auto-merged 1.1
+# bump (#6) broke ConfigFileRaw deserialization.
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-toml = "1.1"
+toml = "0.8"
 
 # Error handling
 thiserror = "2.0"
@@ -49,17 +52,54 @@ tower-http = { version = "0.6", features = ["trace", "cors", "fs", "set-header"]
 # Testing
 tempfile = "3"
 
-# OpenMetrics/Prometheus
-prometheus = "0.14"
+# OpenMetrics/Prometheus.  0.13 is pinned pending the 0.14 migration;
+# dependabot's auto-merged 0.14 bump (#5) broke Registry usage.
+prometheus = "0.13"
 
-# OpenAPI
+# OpenAPI.  schemars is pinned to 0.9 because aide 0.15 (our transitive
+# dependency for the Scalar UI) requires schemars <1.0.  Dependabot's
+# auto-merged 1.2 bump (#3) broke aide's macro-generated handlers.
 aide = { version = "0.15", features = ["axum", "axum-json", "axum-query", "scalar", "macros"] }
-schemars = "1.2"
+schemars = "0.9"
 
-# Authentication
-openidconnect = { version = "4", features = ["reqwest"] }
+# Authentication.  Pinned to 3 pending the 4.x migration; dependabot's
+# auto-merged 4.0 bump (#2) broke crates/server/src/auth.rs.
+openidconnect = { version = "3", features = ["reqwest"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
 tower-sessions = { version = "0.15", features = ["memory-store"] }
+
+# Persistence: sqlx with the SQLite backend.  sqlx gives us
+# compile-time-checked queries via macros, native async, and typed
+# migrations.  chrono + uuid integrations keep timestamp and id columns
+# strongly typed end-to-end.
+sqlx = { version = "0.8", default-features = false, features = [
+  "runtime-tokio",
+  "tls-rustls",
+  "sqlite",
+  "macros",
+  "migrate",
+  "chrono",
+  "uuid",
+] }
+
+# Dates and ids used across the domain model, api types, and database.
+chrono = { version = "0.4", default-features = false, features = [
+  "clock",
+  "serde",
+  "std",
+] }
+uuid = { version = "1", features = ["serde", "v4"] }
+
+# Seeded RNG for deterministic scenario runs.  ChaCha8 is fast and
+# portable across platforms, which matters for reproducible snapshots.
+rand = "0.8"
+rand_chacha = "0.3"
+
+# Test-only crates.  proptest drives property-based tests of the soil
+# moisture model and scheduler; insta captures snapshots of simulation
+# time series and generated OpenAPI output.
+proptest = "1"
+insta = { version = "1", features = ["yaml"] }
 
 # Shared library
 automation-simulator-lib = { path = "crates/lib" }
