@@ -3,6 +3,22 @@
 
 * Upcoming
 
+- Add the Phase 9 demo + scenario regression.  =just demo= builds
+  the Elm bundle and runs the server pre-loaded with the example
+  property; opens at =http://127.0.0.1:3737/= for one-shot manual
+  end-to-end verification.  Adds
+  =data/scenarios/2026-07-heatwave.toml= — 20 simulated days
+  starting July 1 with a scripted three-day heatwave and a
+  daily 15-minute morning watering on Zone A1 — plus
+  =data/scenarios/README.org= explaining the scenario format and
+  how to add new ones.  Adds
+  =crates/lib/tests/scenario_20day_demo.rs= (4 tests) that
+  validate the scenario, cross-check it against the example
+  property's zones, replay it through =SimWorld= and assert
+  every recorded soil-moisture sample stays within
+  =[0.10, 0.48]= v/v, that Zone A1 accumulates exactly 18 000
+  seconds of valve open time, and that two replays produce
+  byte-identical histories.
 - Build the Elm dashboard (Phase 8).  Refactors =frontend/src/Main.elm=
   into a route dispatcher plus per-page modules:
   - =Page/Dashboard.elm= owns the dashboard model + update;

@@ -1,0 +1,44 @@
+#+title:     Scenario fixtures
+#+language:  en
+
+* What lives here
+
+Each =*.toml= file in this directory is a /scenario/: a
+deterministic, reproducible script that the simulation engine
+replays from a known start.  Scenarios let us exercise the engine
+with the same inputs across runs (CI snapshot tests), and let the
+demo and dashboard show interesting state without a human
+clicking buttons for an hour.
+
+Schema is documented at
+[[file:../../crates/lib/src/sim/scenario.rs][crates/lib/src/sim/scenario.rs]];
+the validated form of these files is =Scenario= /
+=ScenarioRaw=.
+
+* Current scenarios
+
+| File                          | Duration | Notes                                                       |
+|-------------------------------+----------+-------------------------------------------------------------|
+| =2026-07-heatwave.toml=       | 20 days  | Three-day Portland heatwave at the start, then climatology. |
+|                               |          | Daily 15-minute morning watering on Zone A1 (veggie bed).   |
+
+* Adding a new scenario
+
+1. Pick a stable RNG seed.  Same seed + same inputs = byte-
+   identical output.
+2. Author the TOML using the schema above.  =offset_minutes= is
+   measured from =start_date= 00:00 simulated.
+3. Wire it into a =cli scenario run= invocation (Phase 9
+   follow-up) or load it directly via the engine for an
+   integration test.
+4. Document it in the table above.
+
+* Why scenarios + the simulator-only =Scenario::manual_interventions=
+
+In v0.1 the simulator does not run a scheduler — schedules live
+in the database (=schedule_item= rows from Phase 4) and v0.2's
+real hardware will read them through the same trait surface, but
+the v0.1 simulator does not pull from the schedule on its own.
+Manual interventions are how a scenario "presses the buttons"
+the homeowner would otherwise click, so the dashboard has a
+realistic state to display when the demo opens.

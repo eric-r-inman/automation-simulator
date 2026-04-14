@@ -1,0 +1,149 @@
+# July 2026 heatwave reference scenario.
+#
+# Twenty simulated days starting at the beginning of July with a
+# scripted three-day heatwave at the start.  Manual interventions
+# fire a 15-minute morning run on the front-yard veggie zone every
+# day so the dashboard has interesting watering history when the
+# user opens the demo.
+#
+# Schema: see crates/lib/src/sim/scenario.rs.
+
+name = "july-2026-heatwave"
+start_date = "2026-07-01"
+duration_minutes = 28800  # 20 days * 24 h * 60 min
+rng_seed = 42
+
+# ── Weather overrides ──────────────────────────────────────────────────────
+# Three-day heatwave at the start: 38 C / 20 % humidity, no rain.
+# After the override expires, the climatology takes over again.
+
+[[weather_overrides]]
+offset_minutes = 0
+duration_minutes = 4320  # 3 days
+temperature_c = 38.0
+humidity_pct = 20.0
+precipitation_mm_per_hour = 0.0
+
+# ── Daily morning runs on Zone A1 (raised veggie bed) ──────────────────────
+# Every day at 06:00 simulated, run for 15 minutes.  Twenty entries
+# = twenty days; the engine processes them in offset_minutes order.
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 360
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 1800
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 3240
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 4680
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 6120
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 7560
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 9000
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 10440
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 11880
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 13320
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 14760
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 16200
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 17640
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 19080
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 20520
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 21960
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 23400
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 24840
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 26280
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
+
+[[manual_interventions]]
+kind = "run-zone"
+offset_minutes = 27720
+zone_id = "zone-a1-veggies"
+duration_minutes = 15
