@@ -3,6 +3,20 @@
 
 * Upcoming
 
+- Planner BOMs now actually include pipe and hose.  =compose_bom=
+  gained the catalog as a parameter so it can look up real
+  manifold and emitter names + prices instead of writing
+  =$0.00 "(see catalog)"= placeholders, and adds two tubing
+  lines: cheapest ≥ 0.4" OD drip line as mainline tubing (20 ft
+  per yard + ≈ zone-area/10 ft per zone) and, when the property
+  has any point-emitter zones, cheapest < 0.4" OD line as branch
+  tubing (~2 ft per emitter).  BOM totals are no longer
+  misleadingly low — a smoke run with a veggie bed + shrub zone
+  went from $136 of components to $216.70 including tubing.
+- Planner test: =bom_includes_real_prices_and_pipe_and_hose=
+  asserts every line has a non-zero unit price, every expected
+  category is present, and branch tubing appears whenever a
+  point-emitter zone is requested.  Workspace now 144/144.
 - Phase 14b multi-property registry + Properties page.
   =AppState= gains a =BTreeMap<String, PropertyBundle>=
   registry beside the currently-active bundle.  Three new

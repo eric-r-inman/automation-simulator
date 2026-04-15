@@ -26,8 +26,8 @@ use crate::catalog::{
 use crate::seed::PropertyBundle;
 use crate::sim::hardware::{ControllerInstance, ControllerInstanceRaw};
 use crate::sim::id::{
-  ControllerInstanceId, ControllerModelId, ManifoldInstanceId, PropertyId,
-  SoilTypeId, SpigotId, YardId, ZoneId,
+  ControllerInstanceId, ControllerModelId, EmitterSpecId, ManifoldInstanceId,
+  ManifoldModelId, PropertyId, SoilTypeId, SpigotId, YardId, ZoneId,
 };
 use crate::sim::property::{Property, Spigot, Yard};
 use crate::sim::zone::{Manifold, PlantKind, Zone};
@@ -250,7 +250,8 @@ fn build_plan(
   // regulator and a basic backflow preventer per spigot.
   let regulator = pick_regulator(catalog, &reqs.yards)?;
   let backflow = pick_backflow(catalog)?;
-  let bom = compose_bom(reqs, &bundle, controller_model, regulator, backflow);
+  let bom =
+    compose_bom(reqs, &bundle, catalog, controller_model, regulator, backflow);
 
   let s = score(reqs, controller_model, &bom, controller_model.is_smart);
   let rationale = build_rationale(controller_model, &bom, reqs);
@@ -383,9 +384,33 @@ fn pick_backflow(
   Ok(*pick.expect("non-empty"))
 }
 
+/// Outer-diameter cutoff (inches) that splits the catalog's
+/// `drip-lines` rows into "mainline" (≥ cutoff, bigger tubing that
+/// carries water from the regulator to the manifold and out to
+/// each zone) and "branch" (< cutoff, skinnier tubing that runs
+/// off the mainline to individual point emitters).  0.4" covers
+/// the 1/2"-vs-1/4" distinction with room to spare for fractional
+/// sizes the catalog might grow later.
+const MAINLINE_MIN_OD_INCHES: f64 = 0.4;
+
+/// Rough mainline-feet-per-square-foot heuristic — a v0.3
+/// approximation good enough for budget comparisons.  Real
+/// layouts vary by plant spacing and bed geometry.
+const MAINLINE_FEET_PER_ZONE_SQ_FT: f64 = 0.10;
+
+/// Per-yard mainline allowance: roughly the run from the spigot /
+/// backflow / regulator back to the manifold.  Flat constant in
+/// v0.3; a follow-up can infer it from yard area.
+const MAINLINE_FEET_PER_YARD: f64 = 20.0;
+
+/// Feet of 1/4" branch tubing per individual point emitter — short
+/// runs from the mainline to the plant.
+const BRANCH_FEET_PER_POINT_EMITTER: f64 = 2.0;
+
 fn compose_bom(
   reqs: &PropertyRequirements,
   bundle: &PropertyBundle,
+  catalog: &Catalog,
   controller_model: &crate::catalog::ControllerModel,
   regulator: &PressureRegulatorModel,
   backflow: &BackflowPreventerModel,
@@ -423,52 +448,41 @@ fn compose_bom(
     line_total_usd: backflow.price_usd * yard_count as f64,
   });
 
-  // Manifolds — one per yard, all the same model in v0.1.
-  // (recommend.rs picks per yard; if they differ we'd need to
-  // group; v0.1's recommender picks the cheapest fit so they
-  // tend to converge.)
+  // Manifolds — dedupe by model id; look prices + names up in the
+  // catalog so each line carries real numbers a reader can verify.
+  let mut manifold_counts: std::collections::BTreeMap<String, i64> =
+    Default::default();
   for m in &bundle.manifolds {
-    let model = bundle
-      .manifolds
-      .iter()
-      .find(|x| x.id == m.id)
-      .map(|x| &x.model_id);
-    if let Some(model_id) = model {
-      // Deduplicate by model id within the BOM.
-      if !lines
-        .iter()
-        .any(|l| l.category == "manifold" && l.catalog_id == model_id.as_str())
-      {
-        let count = bundle
-          .manifolds
-          .iter()
-          .filter(|x| &x.model_id == model_id)
-          .count() as i64;
-        // Look up price from catalog to get name/manufacturer.
-        // We don't have direct access to catalog here; skip the
-        // human name for the dup case — the Phase 13 follow-up
-        // can wire it through.  For v0.1 we just use the id.
-        lines.push(BomLine {
-          category: "manifold".into(),
-          catalog_id: model_id.as_str().to_string(),
-          display_name: model_id.as_str().to_string(),
-          manufacturer: "(see catalog)".to_string(),
-          quantity: count,
-          unit_price_usd: 0.0,
-          line_total_usd: 0.0,
-        });
-      }
+    *manifold_counts
+      .entry(m.model_id.as_str().to_string())
+      .or_insert(0) += 1;
+  }
+  for (model_id, count) in manifold_counts {
+    if let Some(model) =
+      catalog.manifolds.get(&ManifoldModelId::new(&*model_id))
+    {
+      lines.push(BomLine {
+        category: "manifold".into(),
+        catalog_id: model_id,
+        display_name: model.name.clone(),
+        manufacturer: model.manufacturer.clone(),
+        quantity: count,
+        unit_price_usd: model.price_usd,
+        line_total_usd: model.price_usd * count as f64,
+      });
     }
   }
 
-  // Emitter line per distinct emitter id, with rough quantity.
-  // For inline drip, count linear feet ≈ zone area; for point
-  // emitters, count plants per zone roughly = zone area / 4.
+  // Emitters — dedupe by emitter-spec id; estimated quantity per
+  // zone follows the shape of the emitter (inline drip counts ~1
+  // per sq ft at 12" spacing; point emitters count heads per
+  // plant).  Pricing in the catalog is per-100, so the unit price
+  // shown on the BOM is the per-100 divided by 100.
   let mut emitter_counts: std::collections::BTreeMap<String, i64> =
     Default::default();
   for z in &bundle.zones {
     let est = match z.plant_kind {
-      PlantKind::VeggieBed => z.area_sq_ft as i64, // ~1 emitter per sq ft for inline at 12"
+      PlantKind::VeggieBed => z.area_sq_ft as i64, // ~1 emitter per sq ft at 12" spacing
       PlantKind::Shrub => (z.area_sq_ft / 10.0).ceil() as i64,
       PlantKind::Perennial => (z.area_sq_ft / 5.0).ceil() as i64,
       PlantKind::Tree => (z.area_sq_ft / 20.0).ceil() as i64,
@@ -478,18 +492,99 @@ fn compose_bom(
       .or_insert(0) += est.max(1);
   }
   for (eid, count) in emitter_counts {
+    if let Some(spec) = catalog.emitters.get(&EmitterSpecId::new(&*eid)) {
+      let unit = spec.price_usd_per_100 / 100.0;
+      lines.push(BomLine {
+        category: "emitter".into(),
+        catalog_id: eid,
+        display_name: spec.name.clone(),
+        manufacturer: spec.manufacturer.clone(),
+        quantity: count,
+        unit_price_usd: unit,
+        line_total_usd: unit * count as f64,
+      });
+    }
+  }
+
+  // Tubing.  Mainline (1/2" poly) carries water from the regulator
+  // out to every zone — the catalog-driven BOM isn't complete
+  // without it.  Branch tubing (1/4") only matters when there are
+  // point emitters to feed; inline drip beds use the emitter
+  // tubing itself as the distribution line.
+  let mainline_feet: f64 = (MAINLINE_FEET_PER_YARD * yard_count as f64)
+    + bundle
+      .zones
+      .iter()
+      .map(|z| (z.area_sq_ft * MAINLINE_FEET_PER_ZONE_SQ_FT).max(5.0))
+      .sum::<f64>();
+  let branch_feet: f64 = bundle
+    .zones
+    .iter()
+    .filter(|z| !matches!(z.plant_kind, PlantKind::VeggieBed))
+    .map(|z| {
+      let heads = match z.plant_kind {
+        PlantKind::Shrub => (z.area_sq_ft / 10.0).ceil(),
+        PlantKind::Perennial => (z.area_sq_ft / 5.0).ceil(),
+        PlantKind::Tree => (z.area_sq_ft / 20.0).ceil(),
+        PlantKind::VeggieBed => 0.0,
+      };
+      heads * BRANCH_FEET_PER_POINT_EMITTER
+    })
+    .sum();
+
+  if let Some(mainline) = pick_drip_line(catalog, /* want_mainline */ true) {
+    let qty = mainline_feet.ceil() as i64;
     lines.push(BomLine {
-      category: "emitter".into(),
-      catalog_id: eid.clone(),
-      display_name: eid.clone(),
-      manufacturer: "(see catalog)".to_string(),
-      quantity: count,
-      unit_price_usd: 0.0,
-      line_total_usd: 0.0,
+      category: "mainline-tubing".into(),
+      catalog_id: mainline.id.as_str().to_string(),
+      display_name: mainline.name.clone(),
+      manufacturer: mainline.manufacturer.clone(),
+      quantity: qty,
+      unit_price_usd: mainline.price_usd_per_foot,
+      line_total_usd: mainline.price_usd_per_foot * qty as f64,
     });
+  }
+  if branch_feet > 0.0 {
+    if let Some(branch) =
+      pick_drip_line(catalog, /* want_mainline */ false)
+    {
+      let qty = branch_feet.ceil() as i64;
+      lines.push(BomLine {
+        category: "branch-tubing".into(),
+        catalog_id: branch.id.as_str().to_string(),
+        display_name: branch.name.clone(),
+        manufacturer: branch.manufacturer.clone(),
+        quantity: qty,
+        unit_price_usd: branch.price_usd_per_foot,
+        line_total_usd: branch.price_usd_per_foot * qty as f64,
+      });
+    }
   }
 
   Bom::from_lines(lines)
+}
+
+fn pick_drip_line(
+  catalog: &Catalog,
+  want_mainline: bool,
+) -> Option<&crate::catalog::DripLineModel> {
+  let mut viable: Vec<&crate::catalog::DripLineModel> = catalog
+    .drip_lines
+    .values()
+    .filter(|d| {
+      if want_mainline {
+        d.outer_diameter_inches >= MAINLINE_MIN_OD_INCHES
+      } else {
+        d.outer_diameter_inches < MAINLINE_MIN_OD_INCHES
+      }
+    })
+    .collect();
+  viable.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+  viable.into_iter().min_by(|a, b| {
+    a.price_usd_per_foot
+      .partial_cmp(&b.price_usd_per_foot)
+      .unwrap_or(std::cmp::Ordering::Equal)
+  })
 }
 
 fn build_rationale(

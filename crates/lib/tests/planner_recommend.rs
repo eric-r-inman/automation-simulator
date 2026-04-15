@@ -121,6 +121,45 @@ fn unknown_soil_type_returns_semantic_error() {
 }
 
 #[test]
+fn bom_includes_real_prices_and_pipe_and_hose() {
+  let cat = load_catalog();
+  let reqs = small_reqs();
+  let plans = recommend(&reqs, &cat, 1).expect("plans");
+  let plan = &plans[0];
+  // Every plausible line category should show up: controller,
+  // regulator, backflow, manifold, emitter, and mainline tubing.
+  let categories: std::collections::BTreeSet<&str> =
+    plan.bom.lines.iter().map(|l| l.category.as_str()).collect();
+  for needed in [
+    "controller",
+    "pressure-regulator",
+    "backflow-preventer",
+    "manifold",
+    "emitter",
+    "mainline-tubing",
+  ] {
+    assert!(
+      categories.contains(needed),
+      "missing BOM category {needed:?}; got {categories:?}"
+    );
+  }
+  // No line should be a zero-priced placeholder anymore.
+  for line in &plan.bom.lines {
+    assert!(
+      line.unit_price_usd > 0.0,
+      "line {:?} has a zero unit price",
+      line.catalog_id
+    );
+    assert!(line.display_name != line.catalog_id || line.line_total_usd > 0.0);
+  }
+  // small_reqs has a shrub zone, which triggers branch tubing.
+  assert!(
+    categories.contains("branch-tubing"),
+    "expected branch tubing for point-emitter zones"
+  );
+}
+
+#[test]
 fn smart_preference_actually_picks_a_smart_controller() {
   let cat = load_catalog();
   let reqs = small_reqs();
