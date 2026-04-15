@@ -3,6 +3,20 @@
 
 * Upcoming
 
+- Planner BOMs now include the compute host for HAT-style
+  controllers.  New =data/catalog/compute-hosts.toml= catalog
+  category (four SBC rows covering Raspberry Pi 4, 5, Zero 2 W,
+  and a generic 40-pin board), new =ComputeHostModel= domain
+  type, and a new =requires_compute_host= flag on
+  =ControllerModel=.  When the planner picks a controller with
+  that flag set — the OpenSprinkler OS-Pi Pi-HAT is the first —
+  it adds a =compute-host= BOM line for the cheapest
+  Pi-HAT-compatible SBC in the catalog.  Controllers that ship
+  with their own compute (every other row today) skip the line
+  entirely.  Catalog-count snapshot updated to pin the new
+  row count.  New planner test
+  =hat_controllers_include_a_compute_host_line= asserts both
+  directions of the invariant.  Workspace 145/145.
 - Planner BOMs now actually include pipe and hose.  =compose_bom=
   gained the catalog as a parameter so it can look up real
   manifold and emitter names + prices instead of writing

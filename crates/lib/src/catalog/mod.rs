@@ -20,9 +20,10 @@ pub mod models;
 
 pub use errors::CatalogLoadError;
 pub use models::{
-  BackflowKind, BackflowPreventerModel, ControllerModel, DripLineModel,
-  EmitterShape, EmitterSpec, ManifoldModel, PressureRegulatorModel, SensorKind,
-  SensorModel, SoilType, Species, ValveModel, WeatherStationModel,
+  BackflowKind, BackflowPreventerModel, ComputeHostModel, ControllerModel,
+  DripLineModel, EmitterShape, EmitterSpec, ManifoldModel,
+  PressureRegulatorModel, SensorKind, SensorModel, SoilType, Species,
+  ValveModel, WeatherStationModel,
 };
 
 use serde::{Deserialize, Serialize};
@@ -30,9 +31,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::sim::id::{
-  BackflowPreventerModelId, ControllerModelId, DripLineModelId, EmitterSpecId,
-  ManifoldModelId, PressureRegulatorModelId, SensorModelId, SoilTypeId,
-  SpeciesId, ValveModelId, WeatherStationModelId,
+  BackflowPreventerModelId, ComputeHostModelId, ControllerModelId,
+  DripLineModelId, EmitterSpecId, ManifoldModelId, PressureRegulatorModelId,
+  SensorModelId, SoilTypeId, SpeciesId, ValveModelId, WeatherStationModelId,
 };
 
 /// Convenience envelope for a single TOML file whose top-level
@@ -57,6 +58,7 @@ pub struct Catalog {
   pub backflow_preventers:
     HashMap<BackflowPreventerModelId, BackflowPreventerModel>,
   pub drip_lines: HashMap<DripLineModelId, DripLineModel>,
+  pub compute_hosts: HashMap<ComputeHostModelId, ComputeHostModel>,
   pub species: HashMap<SpeciesId, Species>,
   pub soil_types: HashMap<SoilTypeId, SoilType>,
 }
@@ -103,6 +105,10 @@ impl Catalog {
     )?;
     cat.drip_lines =
       load_category(dir, "drip-lines.toml", |row: &DripLineModel| {
+        row.id.clone()
+      })?;
+    cat.compute_hosts =
+      load_category(dir, "compute-hosts.toml", |row: &ComputeHostModel| {
         row.id.clone()
       })?;
     cat.species =
@@ -194,6 +200,7 @@ impl_has_id!(EmitterSpec);
 impl_has_id!(PressureRegulatorModel);
 impl_has_id!(BackflowPreventerModel);
 impl_has_id!(DripLineModel);
+impl_has_id!(ComputeHostModel);
 impl_has_id!(Species);
 impl_has_id!(SoilType);
 

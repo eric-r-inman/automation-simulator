@@ -160,6 +160,49 @@ fn bom_includes_real_prices_and_pipe_and_hose() {
 }
 
 #[test]
+fn hat_controllers_include_a_compute_host_line() {
+  let cat = load_catalog();
+  let reqs = small_reqs();
+  // Ask the planner for enough candidates that at least one HAT
+  // controller appears somewhere in the ranking.
+  let plans = recommend(&reqs, &cat, 10).expect("plans");
+  let mut saw_hat_plan_with_host = false;
+  let mut saw_non_hat_plan_without_host = false;
+  for plan in &plans {
+    let model = cat
+      .controllers
+      .values()
+      .find(|c| c.id.as_str() == plan.controller_model_id)
+      .expect("plan controller in catalog");
+    let has_host_line =
+      plan.bom.lines.iter().any(|l| l.category == "compute-host");
+    if model.requires_compute_host {
+      assert!(
+        has_host_line,
+        "HAT controller {} missing a compute-host line",
+        model.id
+      );
+      saw_hat_plan_with_host = true;
+    } else {
+      assert!(
+        !has_host_line,
+        "non-HAT controller {} wrongly got a compute-host line",
+        model.id
+      );
+      saw_non_hat_plan_without_host = true;
+    }
+  }
+  assert!(
+    saw_hat_plan_with_host,
+    "expected at least one plan whose controller requires a compute host"
+  );
+  assert!(
+    saw_non_hat_plan_without_host,
+    "expected at least one plan whose controller does not require a compute host"
+  );
+}
+
+#[test]
 fn smart_preference_actually_picks_a_smart_controller() {
   let cat = load_catalog();
   let reqs = small_reqs();

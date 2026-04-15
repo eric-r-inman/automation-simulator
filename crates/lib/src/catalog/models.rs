@@ -13,9 +13,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::sim::id::{
-  BackflowPreventerModelId, ControllerModelId, DripLineModelId, EmitterSpecId,
-  ManifoldModelId, PressureRegulatorModelId, SensorModelId, SoilTypeId,
-  SpeciesId, ValveModelId, WeatherStationModelId,
+  BackflowPreventerModelId, ComputeHostModelId, ControllerModelId,
+  DripLineModelId, EmitterSpecId, ManifoldModelId, PressureRegulatorModelId,
+  SensorModelId, SoilTypeId, SpeciesId, ValveModelId, WeatherStationModelId,
 };
 use crate::sim::zone::PlantKind;
 
@@ -35,6 +35,35 @@ pub struct ControllerModel {
   /// the planner to satisfy `prefer_smart_controller` requests.
   #[serde(default)]
   pub is_smart: bool,
+  /// True for controllers that do not ship with their own compute
+  /// and instead mount on a host SBC (e.g. a Raspberry Pi HAT).
+  /// When set, the planner adds a compute-host line to the BOM so
+  /// the BOM is actually buildable.
+  #[serde(default)]
+  pub requires_compute_host: bool,
+  #[serde(default)]
+  pub notes: Option<String>,
+}
+
+// ── Compute host ─────────────────────────────────────────────────────────────
+
+/// A small single-board-computer (SBC) that hosts a controller
+/// HAT or runs the simulator itself.  Rows live in
+/// `data/catalog/compute-hosts.toml`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ComputeHostModel {
+  pub id: ComputeHostModelId,
+  pub name: String,
+  pub manufacturer: String,
+  pub price_usd: f64,
+  /// Memory the SBC ships with, in megabytes.  The planner does
+  /// not currently filter on this — it exists so the BOM line can
+  /// show something meaningful about which variant was picked.
+  pub memory_mb: i64,
+  /// True when this host carries a 40-pin header compatible with
+  /// the Raspberry Pi GPIO pinout, i.e. it can accept a Pi HAT.
+  #[serde(default)]
+  pub supports_raspberry_pi_hat: bool,
   #[serde(default)]
   pub notes: Option<String>,
 }

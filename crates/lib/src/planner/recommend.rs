@@ -427,6 +427,26 @@ fn compose_bom(
     line_total_usd: controller_model.price_usd,
   });
 
+  // Compute host: controllers that mount as a Pi HAT cannot run
+  // on their own.  Add the cheapest compatible SBC to the BOM so
+  // the plan is actually buildable.  Controllers with
+  // `requires_compute_host = false` (the default, which covers
+  // every controller that ships with built-in compute) skip this
+  // entirely.
+  if controller_model.requires_compute_host {
+    if let Some(host) = pick_compute_host(catalog) {
+      lines.push(BomLine {
+        category: "compute-host".into(),
+        catalog_id: host.id.as_str().to_string(),
+        display_name: host.name.clone(),
+        manufacturer: host.manufacturer.clone(),
+        quantity: 1,
+        unit_price_usd: host.price_usd,
+        line_total_usd: host.price_usd,
+      });
+    }
+  }
+
   // One regulator + one backflow per spigot (one per yard).
   let yard_count = reqs.yards.len() as i64;
   lines.push(BomLine {
@@ -562,6 +582,27 @@ fn compose_bom(
   }
 
   Bom::from_lines(lines)
+}
+
+/// Cheapest SBC that accepts a Raspberry Pi HAT, since that is the
+/// form factor we care about in v0.3.  Returns `None` when the
+/// catalog has no compatible row — the planner then drops the
+/// compute-host line rather than hard-failing, matching how
+/// missing drip lines degrade.
+fn pick_compute_host(
+  catalog: &Catalog,
+) -> Option<&crate::catalog::ComputeHostModel> {
+  let mut viable: Vec<&crate::catalog::ComputeHostModel> = catalog
+    .compute_hosts
+    .values()
+    .filter(|h| h.supports_raspberry_pi_hat)
+    .collect();
+  viable.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+  viable.into_iter().min_by(|a, b| {
+    a.price_usd
+      .partial_cmp(&b.price_usd)
+      .unwrap_or(std::cmp::Ordering::Equal)
+  })
 }
 
 fn pick_drip_line(

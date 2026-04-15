@@ -93,6 +93,7 @@ define_id!(EmitterSpecId);
 define_id!(PressureRegulatorModelId);
 define_id!(BackflowPreventerModelId);
 define_id!(DripLineModelId);
+define_id!(ComputeHostModelId);
 define_id!(SpeciesId);
 define_id!(SoilTypeId);
 

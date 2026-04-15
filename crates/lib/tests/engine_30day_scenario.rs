@@ -89,6 +89,7 @@ fn minimal_catalog() -> Arc<Catalog> {
       max_zones: 1,
       valve_voltage_ac: 24.0,
       is_smart: false,
+      requires_compute_host: false,
       notes: None,
     },
     ValveModel {
