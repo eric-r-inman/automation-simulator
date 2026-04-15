@@ -33,6 +33,7 @@ fn seeded_catalog_counts_match_snapshot() {
   counts.insert("pressure_regulators", cat.pressure_regulators.len());
   counts.insert("backflow_preventers", cat.backflow_preventers.len());
   counts.insert("drip_lines", cat.drip_lines.len());
+  counts.insert("compute_hosts", cat.compute_hosts.len());
   counts.insert("species", cat.species.len());
   counts.insert("soil_types", cat.soil_types.len());
   insta::assert_yaml_snapshot!(counts);

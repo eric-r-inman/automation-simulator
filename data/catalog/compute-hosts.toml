@@ -1,0 +1,43 @@
+# Single-board computers (SBCs) that host a controller HAT or run
+# the simulator itself.  The planner adds a compute-host line to a
+# plan's BOM whenever the picked controller has
+# `requires_compute_host = true` (e.g. the OpenSprinkler OS-Pi,
+# which is a Raspberry Pi HAT without its own on-board CPU).
+#
+# Field reference: crates/lib/src/catalog/models.rs::ComputeHostModel.
+
+[raspberry-pi-4-4gb]
+id = "raspberry-pi-4-4gb"
+name = "Raspberry Pi 4 Model B (4 GB)"
+manufacturer = "Raspberry Pi Foundation"
+price_usd = 55.00
+memory_mb = 4096
+supports_raspberry_pi_hat = true
+notes = "Standard quad-core ARM SBC; accepts any Pi HAT including the OpenSprinkler OS-Pi."
+
+[raspberry-pi-5-8gb]
+id = "raspberry-pi-5-8gb"
+name = "Raspberry Pi 5 (8 GB)"
+manufacturer = "Raspberry Pi Foundation"
+price_usd = 80.00
+memory_mb = 8192
+supports_raspberry_pi_hat = true
+notes = "Newer generation Pi; faster CPU and more RAM.  Same 40-pin header."
+
+[raspberry-pi-zero-2-w]
+id = "raspberry-pi-zero-2-w"
+name = "Raspberry Pi Zero 2 W"
+manufacturer = "Raspberry Pi Foundation"
+price_usd = 15.00
+memory_mb = 512
+supports_raspberry_pi_hat = true
+notes = "Minimal-footprint Pi with Wi-Fi; cheapest compatible host when memory is not a concern."
+
+[generic-arm-sbc]
+id = "generic-arm-sbc"
+name = "Generic 40-pin ARM SBC"
+manufacturer = "Generic"
+price_usd = 45.00
+memory_mb = 2048
+supports_raspberry_pi_hat = true
+notes = "Stand-in for unbranded Pi-compatible boards a user may already own."

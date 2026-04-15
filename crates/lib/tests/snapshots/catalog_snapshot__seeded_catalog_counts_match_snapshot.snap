@@ -1,9 +1,10 @@
 ---
 source: crates/lib/tests/catalog_snapshot.rs
-assertion_line: 38
+assertion_line: 39
 expression: counts
 ---
 backflow_preventers: 3
+compute_hosts: 4
 controllers: 8
 drip_lines: 2
 emitters: 9
