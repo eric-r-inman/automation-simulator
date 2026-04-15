@@ -65,13 +65,16 @@ Shows every zone of the active property as its own card:
   been open.
 - Plant kind and area.
 
-Each card has three actions:
+Each card has a row of preset run buttons plus a custom-duration
+input:
 
-| Button    | Effect                                                 |
-|-----------+--------------------------------------------------------|
-| Run 5 min | Opens the valve for five simulated minutes.            |
-| Run 15 min| Opens the valve for fifteen simulated minutes.         |
-| Stop      | Closes the valve immediately.                          |
+| Button / control      | Effect                                          |
+|-----------------------+-------------------------------------------------|
+| 5 min / 15 min /      | Opens the valve for that many simulated         |
+| 30 min / 1 h / 2 h    | minutes.                                        |
+| ~[minutes] Run~       | Custom duration.  Type any positive integer and |
+|                       | press Run; overnight runs (e.g. 480) are fine.  |
+| Stop                  | Closes the valve immediately.                   |
 
 Zones are editable:
 
