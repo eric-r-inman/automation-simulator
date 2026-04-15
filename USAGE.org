@@ -21,16 +21,19 @@ planning tool.
 
 * Starting it
 
-Inside the Nix development shell (=nix develop=), the shortest
-path is:
+From anywhere in the repo:
 
 #+begin_src sh :exports code
 just
 #+end_src
 
-That builds the Elm frontend, starts the server on
-http://127.0.0.1:3737/, and pre-loads the built-in example
-property.  =Ctrl+C= stops the server.
+That is all.  The recipe auto-enters the Nix dev shell, builds
+the Elm frontend, starts the server on http://127.0.0.1:3737/,
+and pre-loads the built-in example property.  =Ctrl+C= stops the
+server.
+
+Prerequisites: [[https://nixos.org/download.html][Nix]] with flakes enabled, plus
+[[https://github.com/casey/just][just]].
 
 Other aliases:
 
