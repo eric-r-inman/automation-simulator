@@ -31,7 +31,7 @@ sd-notify = "0.4"
 tap = "1.0"
 
 # CLI parsing
-clap = { version = "4.5", features = ["derive", "env"] }
+clap = { version = "4.6", features = ["derive", "env"] }
 
 # Configuration.  toml tracks the 0.x line; 1.0+ is held back via
 # dependabot ignore (#6 first attempted the bump and broke
