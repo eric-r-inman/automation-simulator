@@ -6,9 +6,9 @@ dashboard turns into POST requests.
 -}
 
 import Api
-import Html exposing (Html, button, dd, div, dl, dt, h3, span, text)
+import Html exposing (Html, button, dd, div, dl, dt, h3, input, span, text)
 import Html.Attributes as Attr
-import Html.Events exposing (onClick)
+import Html.Events exposing (onClick, onInput)
 
 
 type alias Args msg =
@@ -21,6 +21,8 @@ type alias Args msg =
     , onEdit : msg
     , onDelete : msg
     , isFocused : Bool
+    , customMinutes : String
+    , onSetCustomMinutes : String -> msg
     }
 
 
@@ -60,6 +62,31 @@ view args =
 
             else
                 "zone-card"
+
+        parsedCustomMinutes : Maybe Int
+        parsedCustomMinutes =
+            String.toInt (String.trim args.customMinutes)
+                |> Maybe.andThen
+                    (\n ->
+                        if n > 0 then
+                            Just n
+
+                        else
+                            Nothing
+                    )
+
+        customRunDisabled : Bool
+        customRunDisabled =
+            parsedCustomMinutes == Nothing
+
+        customRunClick : List (Html.Attribute msg)
+        customRunClick =
+            case parsedCustomMinutes of
+                Just n ->
+                    [ onClick (args.onRun n) ]
+
+                Nothing ->
+                    []
     in
     div
         [ Attr.class focusedClass
@@ -84,21 +111,33 @@ view args =
                 ]
             ]
         , div [ Attr.class "zone-actions" ]
-            [ button
-                [ Attr.class "btn btn-run"
-                , onClick (args.onRun 5)
-                ]
-                [ text "Run 5 min" ]
-            , button
-                [ Attr.class "btn btn-run"
-                , onClick (args.onRun 15)
-                ]
-                [ text "Run 15 min" ]
+            [ runPresetButton args 5 "5 min"
+            , runPresetButton args 15 "15 min"
+            , runPresetButton args 30 "30 min"
+            , runPresetButton args 60 "1 h"
+            , runPresetButton args 120 "2 h"
             , button
                 [ Attr.class "btn btn-stop"
                 , onClick args.onStop
                 ]
                 [ text "Stop" ]
+            ]
+        , div [ Attr.class "zone-custom-run" ]
+            [ input
+                [ Attr.type_ "number"
+                , Attr.min "1"
+                , Attr.placeholder "minutes"
+                , Attr.value args.customMinutes
+                , Attr.class "custom-minutes"
+                , onInput args.onSetCustomMinutes
+                ]
+                []
+            , button
+                (Attr.class "btn btn-run"
+                    :: Attr.disabled customRunDisabled
+                    :: customRunClick
+                )
+                [ text "Run" ]
             ]
         , div [ Attr.class "zone-meta-actions" ]
             [ button
@@ -113,6 +152,15 @@ view args =
                 [ text "Delete" ]
             ]
         ]
+
+
+runPresetButton : Args msg -> Int -> String -> Html msg
+runPresetButton args minutes label_ =
+    button
+        [ Attr.class "btn btn-run"
+        , onClick (args.onRun minutes)
+        ]
+        [ text label_ ]
 
 
 formatDuration : Int -> String
