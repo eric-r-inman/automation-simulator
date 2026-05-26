@@ -79,7 +79,7 @@ tower-sessions = { version = "0.15", features = ["memory-store"] }
 # compile-time-checked queries via macros, native async, and typed
 # migrations.  chrono + uuid integrations keep timestamp and id columns
 # strongly typed end-to-end.
-sqlx = { version = "0.8", default-features = false, features = [
+sqlx = { version = "0.9", default-features = false, features = [
   "runtime-tokio",
   "tls-rustls",
   "sqlite",
