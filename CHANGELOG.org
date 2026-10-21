@@ -3,6 +3,14 @@
 
 * Upcoming
 
+- Longer zone run durations on the Dashboard.  The per-zone
+  card grew from two preset buttons (5 / 15 min) to five
+  (5, 15, 30 min, 1 h, 2 h) plus a number-input + Run button
+  for arbitrary durations.  The backend already accepts any
+  positive minute count; this is purely a UI reach fix.
+  Custom-minutes input state lives on the Dashboard model
+  keyed by zone id so every card tracks its own.  USAGE.org
+  updated to match.
 - Planner BOMs now include the compute host for HAT-style
   controllers.  New =data/catalog/compute-hosts.toml= catalog
   category (four SBC rows covering Raspberry Pi 4, 5, Zero 2 W,

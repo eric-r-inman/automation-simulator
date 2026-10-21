@@ -899,3 +899,25 @@ button.btn-delete:hover:not([disabled]) {
   color: var(--color-error, #a33);
   font-size: 0.9rem;
 }
+
+.zone-custom-run {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.zone-custom-run .custom-minutes {
+  width: 5.5rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+
+.zone-custom-run .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

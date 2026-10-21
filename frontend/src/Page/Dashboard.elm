@@ -8,6 +8,7 @@ sync with the engine.
 -}
 
 import Api
+import Dict exposing (Dict)
 import Html exposing (Html, button, div, h1, h2, p, section, text)
 import Html.Attributes as Attr
 import Html.Events exposing (onClick)
@@ -32,6 +33,7 @@ type alias Model =
     , lastError : Maybe String
     , editor : Maybe ZoneEditor.Form
     , confirmDeleteZoneId : Maybe String
+    , customRunMinutes : Dict String String
     }
 
 
@@ -52,6 +54,7 @@ init =
       , lastError = Nothing
       , editor = Nothing
       , confirmDeleteZoneId = Nothing
+      , customRunMinutes = Dict.empty
       }
     , refreshAll
     )
@@ -72,6 +75,7 @@ type Msg
     | ResetClicked
     | ResetResulted (Result Http.Error Api.ResetResult)
     | RunZoneClicked String Int
+    | SetCustomRunMinutes String String
     | RunZoneResulted (Result Http.Error Api.RunResult)
     | StopZoneClicked String
     | StopZoneResulted (Result Http.Error Api.StopResult)
@@ -148,6 +152,14 @@ update msg model =
         RunZoneClicked zoneId minutes ->
             ( { model | busy = True, lastError = Nothing }
             , Api.postRunZone zoneId minutes RunZoneResulted
+            )
+
+        SetCustomRunMinutes zoneId value ->
+            ( { model
+                | customRunMinutes =
+                    Dict.insert zoneId value model.customRunMinutes
+              }
+            , Cmd.none
             )
 
         RunZoneResulted (Ok _) ->
@@ -442,6 +454,10 @@ viewLoaded model property state zonesResponse =
                             , onEdit = OpenEditZone zone
                             , onDelete = RequestDeleteZone zone.id
                             , isFocused = model.focusedZoneId == Just zone.id
+                            , customMinutes =
+                                Dict.get zone.id model.customRunMinutes
+                                    |> Maybe.withDefault ""
+                            , onSetCustomMinutes = SetCustomRunMinutes zone.id
                             }
                     )
 
